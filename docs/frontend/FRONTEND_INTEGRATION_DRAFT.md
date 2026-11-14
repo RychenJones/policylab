@@ -1,37 +1,36 @@
-# Frontend API Integration Draft
+# Current Frontend and Backend Connection
 
-Future wiring map; not a claim of an integrated application. The minimum commit leaves the committed `frontend/app.js`, `frontend/index.html`, README, and backend source unchanged. The existing page still runs its local demo. Only the standalone transport client and its tests are added, alongside these rebuild documents.
+The merged six-variable frontend now calls the C# model by default. No preview formulas, hardcoded results, or household-response fallbacks remain. This map and the [API contract](API_DRAFT.md) are maintained rebuild references.
 
-Use [API_DRAFT.md](API_DRAFT.md) for the complete target contract and [API_FUNCTIONS_DRAFT.md](API_FUNCTIONS_DRAFT.md) for implemented transport behavior. Keep plain JavaScript; no React/TypeScript migration is required.
+## Current flow
 
-## Connection work for the frontend owner
+Form submit → buildBackendRequest(values) → app.js requestSimulation(request) → frontend/api.js → POST /api/simulate → ApiBoundary → Simulator → sanitized percentages → renderResults.
 
-| Existing part | Required future adaptation |
-| --- | --- |
-| `readPolicyForm()` | Read gas change, EV rebate, and fare only. Map `#gas-tax` to `gasTaxChangeUsdPerGallon`; remove seed. Distinguish blank input from numeric zero. |
-| `validatePolicy()` | Replace mock ranges with the agreed inclusive bounds: -0.50–3, 0–12000, 0–10. Defaults are 0, 0, 2.50. |
-| Local `runSimulation()` | Remove/bypass the local formulas and call the imported transport's `runSimulation(policy, options)` instead. Avoid a function-name collision. |
-| Submit handler | Await response data; catch ApiError and split field/form errors. Preserve inputs and last successful results. |
-| `renderResults()` | Adapt to `policy`, `baseline`, `proposed`, `changes`, `assumptions`, and modelVersion. The current demo response has a different shape. |
-| `#behavior-chart` | Plot server `modeCounts.gas/ev/transit`; do not calculate household switches from net mode counts. |
-| `#result-status`, `#form-error` | Loading/success/error state and safe text messages. Known field errors identify the three controls; unknown keys stay form-level. |
-| `#reset-button` | Invalidate old requests, clear errors/output, and restore agreed defaults. Do not fabricate successful example results. |
-| Assumptions dialog | Use actual server assumptions as text; do not repeat outdated model claims. |
-| Startup and script loading | Add an explicit module import/loading arrangement. Optionally call getConfig; use documented fallback input settings when that optional endpoint is unavailable. |
+| Form control | JSON field | Conversion |
+| --- | --- | --- |
+| #base-gas | baseGasShare | Percent / 100. |
+| #base-ev | baseEvShare | Percent / 100. |
+| #base-no-car | baseNoCarShare | Percent / 100. |
+| #gas-tax | gasTax | Numeric USD/gallon. |
+| #ev-rebate | evRebate | Numeric USD. |
+| #transit-fare | transitFare | Numeric USD/ride. |
 
-Do not import `api.js` into the old app without adapting both request and response handling. The minimal client requires only a same-origin `/api` or an explicitly configured `createApi({ baseUrl })` instance. No frontend tooling or host is chosen by this commit.
+Starting percentages must total 100%, with each category at least 0.001% for calibration. Default shares are 88.592%,1.808%,9.6%; the merged example's former no-car value 10 incorrectly totaled 100.4%.
 
-## Core rules to retain at integration
+## Responsibilities
 
-- C# owns all simulation calculations. Do not copy demo formulas or adapt aggregate percentages into household costs, emissions, transitions, or car ownership changes.
-- The new household model is not present in the reviewed backend. Do not equate `otherPct` with the plan's transit outcome or the brief's broader “lose the car” wording.
-- Label displayed results with the policy that produced them; edited form inputs do not change old results.
-- Only the newest request may update the UI, including error and cleanup callbacks. Disable Run while active and handle reset/cached navigation deliberately.
-- The client supports caller cancellation, not automatic deadlines. UI can supply an AbortController later; abort does not guarantee server rollback or interruption.
-- Successful JSON is returned unchanged. Any future fixture mode must be explicitly identified by its server/UI, never silently presented as a calculation.
+- app.js owns DOM conversion, error/status presentation, reset, captured result inputs and request ID/controller. Its exported requestSimulation delegates to the API client.
+- api.js owns outbound/inbound validation and whitelisting, HTTP parsing and ApiError. Old gasTaxChangeUsdPerGallon, runSimulation and household wrappers are unsupported.
+- ApiBoundary.cs owns authoritative input validation, request-local model setup and result validation.
+- Simulator.cs owns calculation and calibration. No request mutates global configuration.
+- WebHost.cs owns routing, CORS, safe errors and static delivery. The web host is the default startup; console examples remain in Program.cs.
 
-## Deferred source and ownership
+## Startup and display
 
-The previous C# host/contracts/scaffold, fixture server/data, full UI wiring, cached-navigation fix, frontend race tests, timeout composition, detailed schema checks, config fallback, package metadata, and run instructions are preserved in a local `API_DEFERRED_IMPLEMENTATION.md` outside the repository. They are reference material, not approved shared architecture or dependencies of this commit.
+index.html loads app.js as a module. Startup fetches config, validates it, fills six defaults and enables Run. Failure offers a backend retry, never a mock. Results are hidden until a valid response arrives.
 
-Backend setup and service implementation belong with the backend owner; markup/rendering/history/comparison belong with the frontend owners. Bring back only the necessary connection changes once both ends expose the agreed contract. Add a real integration smoke test before calling the application connected.
+Render only gasPct,evPct,noCarPct against the submitted starting mix. Net differences are percentage points. Any equivalent household quantities scale by 5,000 and are explicitly not individual simulation or observed switching counts. The submitted inputs remain visible independently of later edits. Chart.js is retained; a text/table result works without the CDN library.
+
+Reset aborts/invalidates old callbacks, restores server defaults, clears errors and hides output. Errors preserve inputs and previous good results. Only the latest request may render or clean up loading state; cached navigation restores readiness. All server messages use textContent.
+
+The [old household/React proposal](../archive/household-implementation-plan.md) is historical only. No household generator, cost/emissions model, scenario persistence, frontend framework migration, or local policy calculation is added here.

@@ -4,6 +4,11 @@
   --blue: #9bb9d1; --shadow: 0 12px 30px rgba(28, 53, 45, 0.07);
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.results-table { width: 100%; margin-top: 18px; border-collapse: collapse; font-size: 12px; }
+.results-table th, .results-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--line); }
+.results-table caption { text-align: left; color: var(--muted); }
+input[aria-invalid="true"] { outline: 2px solid #a33e33; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; }
 button, input { font: inherit; } button { cursor: pointer; }
 .topbar { height: 74px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(22px, 5vw, 76px); border-bottom: 1px solid var(--line); background: rgba(246, 247, 243, .94); }

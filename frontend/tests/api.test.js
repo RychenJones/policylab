@@ -1,74 +1,118 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ApiError, createApi } from '../api.js';
+import { ApiError, createApi, INPUT_RULES, sanitizeRequest, sanitizeResult } from '../api.js';
 
-const policy = { gasTaxChangeUsdPerGallon: 1, evRebateUsd: 7500, publicTransitFareUsdPerRide: 2.5 };
-// Transport-only shape: not calculated household results or a model fixture.
-const payload = { policy, baseline: {}, proposed: {}, changes: {} };
-const json = (value, status = 200) => new Response(JSON.stringify(value), {
-  status, headers: { 'Content-Type': 'application/json' }
-});
+const input = { baseGasShare: 0.88592, baseEvShare: 0.01808, baseNoCarShare: 0.096, gasTax: 1, evRebate: 7500, transitFare: 1.75 };
+const result = { gasPct: 80, evPct: 10, noCarPct: 10 };
+const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
-test('POST sends exactly the new policy fields and returns the response unchanged', async () => {
-  const api = createApi({ baseUrl: 'http://example.test/api/', fetchImpl: async (url, options) => {
-    assert.equal(url, 'http://example.test/api/simulate');
-    assert.equal(options.method, 'POST');
-    assert.equal(options.headers['Content-Type'], 'application/json');
-    assert.deepEqual(JSON.parse(options.body), policy);
-    return json(payload);
-  } });
-  assert.deepEqual(await api.runSimulation({ ...policy, seed: 42 }), payload);
-});
-
-test('GET methods use the agreed health and config routes without a body', async () => {
+test('requestSimulation sends exactly six validated numeric fields to POST /api/simulate', async () => {
   const api = createApi({ fetchImpl: async (url, options) => {
-    assert.equal(options.method, 'GET'); assert.equal(options.body, undefined);
-    if (url === '/api/health') return json({ status: 'ok' });
-    assert.equal(url, '/api/config'); return json({ inputs: {}, statusQuoPolicy: policy });
+    assert.equal(url, '/api/simulate'); assert.equal(options.method, 'POST');
+    assert.deepEqual(JSON.parse(options.body), input);
+    assert.equal(options.headers['Content-Type'], 'application/json');
+    return json({ ...result, internal: 'must not reach UI' });
   } });
-  assert.equal((await api.getHealth()).status, 'ok');
-  assert.deepEqual((await api.getConfig()).statusQuoPolicy, policy);
+  assert.deepEqual(await api.requestSimulation(input), result);
 });
 
-test('validation errors split known fields from body/unknown keys and retain actual HTTP status', async () => {
+test('client rejects unknown, missing, string, null, non-finite, zero-share and nonconserving requests before sending', async () => {
+  const api = createApi({ fetchImpl: () => { throw new Error('Must not send'); } });
+  for (const invalid of [null, { ...input, seed: 42 }, { ...input, gasTax: '1' }, { ...input, gasTax: NaN },
+    { ...input, evRebate: null }, { ...input, transitFare: Infinity }, { ...input, baseEvShare: 0 },
+    { ...input, baseGasShare: 0.9 }, Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'gasTax'))])
+    await assert.rejects(api.requestSimulation(invalid), error => error.status === 400 && error.code === 'validation_failed');
+  assert.equal(sanitizeRequest(input).baseNoCarShare, 0.096);
+});
+
+test('response sanitation rejects invalid shares and only returns three numeric fields', () => {
+  for (const invalid of [null, [], {}, { ...result, gasPct: '80' }, { ...result, gasPct: NaN },
+    { ...result, evPct: Infinity }, { ...result, noCarPct: -1 }, { ...result, noCarPct: 101 }, { ...result, gasPct: 70 }])
+    assert.throws(() => sanitizeResult(invalid), error => error.code === 'invalid_response');
+  assert.deepEqual(sanitizeResult({ ...result, extra: '<script>' }), result);
+});
+
+test('HTTP failures keep actual status, known fields and general error messages', async () => {
   const api = createApi({ fetchImpl: async () => json({ status: 200, errors: {
-    evRebateUsd: ['Enter a value from 0 to 12000.'], body: ['Invalid request.'], constructor: ['General error.'], bad: 42
+    baseGasShare: ['Invalid fraction.'], body: ['Invalid total.'], constructor: ['General error.'], bad: 42
   } }, 400) });
-  await assert.rejects(api.runSimulation(policy), error => error instanceof ApiError && error.status === 400
-    && error.fieldErrors.evRebateUsd.length === 1 && error.formError === 'Invalid request. General error.');
+  await assert.rejects(api.requestSimulation(input), error => error instanceof ApiError && error.status === 400
+    && error.fieldErrors.baseGasShare.length === 1 && error.formError === 'Invalid total. General error.');
+  for (const body of ['<h1>Gateway error</h1>', '', '{'])
+    await assert.rejects(createApi({ fetchImpl: async () => new Response(body, { status: 502 }) }).requestSimulation(input),
+      error => error.status === 502 && error.message === 'Request failed (502).');
 });
 
-test('HTML, empty, and malformed error bodies remain safe HTTP failures', async () => {
-  for (const body of ['<h1>Gateway error</h1>', '', '{']) {
-    const api = createApi({ fetchImpl: async () => new Response(body, { status: 502 }) });
-    await assert.rejects(api.runSimulation(policy), error => error.status === 502 && error.message === 'Request failed (502).');
-  }
+test('malformed/empty/legacy/non-JSON successful responses cannot reach renderers', async () => {
+  for (const response of [json({ policy: {}, baseline: {}, proposed: {}, changes: {} }),
+    new Response(null, { status: 204 }), new Response('{', { headers: { 'Content-Type': 'application/json' } }),
+    new Response(JSON.stringify(result), { headers: { 'Content-Type': 'text/html' } })])
+    await assert.rejects(createApi({ fetchImpl: async () => response }).requestSimulation(input), error => error.code === 'invalid_response');
 });
 
-test('malformed, empty, and old aggregate success bodies are invalid responses', async () => {
-  for (const response of [json({ gasPct: 80 }), new Response(null, { status: 204 }),
-    new Response('{', { headers: { 'Content-Type': 'application/json' } })])
-    await assert.rejects(createApi({ fetchImpl: async () => response }).runSimulation(policy), error => error.code === 'invalid_response');
-});
-
-test('network failures and caller cancellation are distinct from HTTP responses', async () => {
-  await assert.rejects(createApi({ fetchImpl: async () => { throw new TypeError('fetch failed'); } }).runSimulation(policy),
-    error => error.status === 0 && error.code === 'network_error');
-  const unused = createApi({ fetchImpl: () => { throw new Error('Must not send'); } });
-  await assert.rejects(unused.runSimulation(policy, { signal: AbortSignal.abort() }), error => error.code === 'cancelled');
-  const caller = new AbortController();
+test('network failures, caller abort and unexpected exceptions remain distinct', async () => {
+  await assert.rejects(createApi({ fetchImpl: async () => { throw new TypeError('fetch failed'); } }).requestSimulation(input), error => error.code === 'network_error');
+  await assert.rejects(createApi({ fetchImpl: () => { throw new Error('Must not send'); } }).requestSimulation(input, { signal: AbortSignal.abort() }), error => error.code === 'cancelled');
+  const controller = new AbortController();
   const api = createApi({ fetchImpl: async (_url, { signal }) => ({ text: () => new Promise((_resolve, reject) => {
-    signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
-    caller.abort();
+    signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }); controller.abort();
   }) }) });
-  await assert.rejects(api.runSimulation(policy, { signal: caller.signal }), error => error.code === 'cancelled');
+  await assert.rejects(api.requestSimulation(input, { signal: controller.signal }), error => error.code === 'cancelled');
+  await assert.rejects(createApi({ fetchImpl: async () => { throw new Error('bug'); } }).requestSimulation(input), /bug/);
 });
 
-test('programming exceptions propagate and optional server codes remain available', async () => {
-  await assert.rejects(createApi({ fetchImpl: async () => { throw new Error('bug'); } }).runSimulation(policy), /bug/);
-  const circular = {}; circular.self = circular;
-  await assert.rejects(createApi({ fetchImpl: () => { throw new Error('Must not send'); } }).runSimulation({ ...policy, evRebateUsd: circular }),
-    error => error instanceof TypeError && !(error instanceof ApiError));
-  await assert.rejects(createApi({ fetchImpl: async () => json({ code: 'model_not_ready' }, 500) }).runSimulation(policy),
-    error => error.status === 500 && error.code === 'model_not_ready');
+const origin = process.env.API_TEST_URL;
+test('live API config, model regression, custom populations, validation, isolation, CORS and packaged frontend', { skip: !origin }, async () => {
+  const api = createApi({ baseUrl: `${origin}/api` });
+  assert.equal((await api.getHealth()).status, 'ok');
+  const config = await api.getConfig();
+  for (const field of Object.keys(INPUT_RULES)) {
+    assert.equal(config.inputs[field].min, INPUT_RULES[field].min); assert.equal(config.inputs[field].max, INPUT_RULES[field].max);
+  }
+  const original = await api.requestSimulation({ ...input, evRebate: 0 });
+  assert.ok(Math.abs(original.gasPct - 87.36542287082048) < 1e-9);
+  const scenarios = [
+    { ...input, baseGasShare: 0.6, baseEvShare: 0.2, baseNoCarShare: 0.2, gasTax: 0, evRebate: 0 },
+    { ...input, baseGasShare: 0.3, baseEvShare: 0.3, baseNoCarShare: 0.4, gasTax: 0, evRebate: 0 }
+  ];
+  const outputs = await Promise.all([...scenarios, ...scenarios].map(value => api.requestSimulation(value)));
+  outputs.forEach((value, index) => {
+    const expected = scenarios[index % 2];
+    assert.ok(Math.abs(value.gasPct - expected.baseGasShare * 100) < 1e-8);
+    assert.ok(Math.abs(value.evPct - expected.baseEvShare * 100) < 1e-8);
+    assert.ok(Math.abs(value.noCarPct - expected.baseNoCarShare * 100) < 1e-8);
+  });
+  const send = (body, type = 'application/json') => fetch(`${origin}/api/simulate`, {
+    method: 'POST', headers: type ? { 'Content-Type': type } : {}, body: new TextEncoder().encode(body)
+  });
+  const invalid = [
+    ['', 'body'], ['{', 'body'], ['null', 'body'], ['[]', 'body'], ['{}', 'gasTax'],
+    [JSON.stringify({ ...input, gasTax: -1 }), 'gasTax'], [JSON.stringify({ ...input, gasTax: 11 }), 'gasTax'],
+    [JSON.stringify({ ...input, evRebate: 20001 }), 'evRebate'], [JSON.stringify({ ...input, transitFare: 16 }), 'transitFare'],
+    [JSON.stringify({ ...input, baseGasShare: 0 }), 'baseGasShare'],
+    [JSON.stringify({ ...input, baseEvShare: -0.1 }), 'baseEvShare'],
+    [JSON.stringify({ ...input, baseNoCarShare: 0.1 }), 'body'],
+    [JSON.stringify({ ...input, gasTax: '1' }), 'gasTax'], [JSON.stringify({ ...input, gasTax: null }), 'gasTax'],
+    [JSON.stringify({ ...input, seed: 42 }), 'body'],
+    [JSON.stringify(input).replace('"gasTax":1', '"gasTax":1e400'), 'gasTax'],
+    [JSON.stringify(input).replace('"gasTax":1', '"gasTax":1,"gasTax":2'), 'gasTax']
+  ];
+  for (const [body, key] of invalid) {
+    const response = await send(body); assert.equal(response.status, 400, body);
+    assert.match(response.headers.get('Content-Type'), /application\/problem\+json/);
+    assert.ok((await response.json()).errors[key], key);
+  }
+  for (const type of [null, 'text/plain']) assert.equal((await send(JSON.stringify(input), type)).status, 400);
+  assert.equal((await send('x'.repeat(17000))).status, 413);
+  assert.equal((await fetch(`${origin}/api/simulation`)).status, 404);
+  const method = await fetch(`${origin}/api/simulate`); assert.equal(method.status, 405); assert.match(method.headers.get('Allow'), /POST/);
+  for (const allowed of [true, false]) {
+    const response = await fetch(`${origin}/api/simulate`, { method: 'OPTIONS', headers: {
+      Origin: allowed ? 'http://localhost:5173' : 'http://untrusted.example',
+      'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type'
+    } });
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), allowed ? 'http://localhost:5173' : null);
+  }
+  const html = await (await fetch(origin)).text(); assert.match(html, /type="module"/); assert.doesNotMatch(html, /Preview data/);
+  for (const path of ['/app.js', '/api.js', '/styles.css']) assert.equal((await fetch(`${origin}${path}`)).status, 200);
 });

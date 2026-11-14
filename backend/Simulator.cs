@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 
 namespace TransportPolicy;
 
@@ -92,12 +93,23 @@ public static class Simulator
 
     // Runs the configured number of years and returns final travel shares.
     public static Result Simulate(double gasTax, double evRebate, double transitFare)
+        => Simulate(Cfg, gasTax, evRebate, transitFare);
+
+    // A request supplies its own immutable configuration and calibration. Never
+    // mutate Cfg or reuse another scenario's fitted baseline parameters.
+    public static Result Simulate(Config cfg, double gasTax, double evRebate, double transitFare,
+                                  CancellationToken cancellationToken = default)
     {
-        var state = new State(Cfg.BaseShare);
+        cancellationToken.ThrowIfCancellationRequested();
+        var calibrated = Calibrate(cfg);
+        var state = new State(cfg.BaseShare);
 
         // Apply the same policy inputs once for each simulated year.
-        for (int year = 0; year < Cfg.SimulatedYears; year++)
-            state = Step(Cfg, Calibrated, state, gasTax, evRebate, transitFare);
+        for (int year = 0; year < cfg.SimulatedYears; year++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            state = Step(cfg, calibrated, state, gasTax, evRebate, transitFare);
+        }
 
         return new Result(
             GasPct: 100 * state.Mode.Gas,
