@@ -29,6 +29,8 @@ ApiError extends Error with status, message, optional code, fieldErrors and form
 
 HTTP errors do not inherently reject fetch. Actual response status overrides body status. Empty/malformed/non-JSON HTTP error bodies receive safe generic messages, never raw HTML. Copy only typed error-message arrays and use textContent. Unknown error keys are never arbitrary DOM selectors.
 
+The UI translates diagnostics instead of printing raw ApiError messages or server arrays. Starting-share errors use percentage units and control labels; blank input asks for a number. End users are not asked to start a backend or understand JSON, fractions, or calibration.
+
 Successful output is validated and whitelisted. Strings, missing fields, null, non-finite/out-of-range shares, and nonconserving totals fail. Legacy household wrappers and otherPct aliases are unsupported. Sanitation does not coerce, clamp or repair model data.
 
 ## C# boundary
@@ -44,5 +46,7 @@ Simulator.Simulate(Config cfg, double gasTax, double evRebate, double transitFar
 The form converts percentages to fractions and passes sanitized results to Chart.js and a table. Load config first. Use valueAsNumber so blanks do not become zero. Associate output with the captured request, and guard success/error/finally with an increasing request ID.
 
 Reset aborts/invalidates pending work, hides output, restores defaults and fabricates no result. Cached navigation restores button readiness. Editing marks old results stale. The table works if the external chart library is unavailable.
+
+The result panel has explicit empty/loading/error/success state. Try again reloads configuration before initialization or submits the form afterward. Prior successful output stays visible during later loading/failure. Cached navigation restores the panel as well as the button. Reveal the result container before resizing/updating Chart.js. UI tests resolve selectors from the real index.html rather than invent missing nodes.
 
 Tests cover client/server input rejection, output whitelisting, exact six-field POST, malformed responses, model regression and custom-population isolation, cancellation/reset races, CORS and packaged frontend assets. Passing transport tests does not certify real-world predictive validity.

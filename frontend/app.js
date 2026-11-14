@@ -11,6 +11,8 @@ const emptyState = document.querySelector('#empty-state');
 const loadingState = document.querySelector('#loading-state');
 const errorState = document.querySelector('#error-state');
 const errorStateDetail = document.querySelector('#error-state-detail');
+const retryButton = document.querySelector('#retry-button');
+const retryConnection = document.querySelector('#retry-connection');
 const numberFormatter = new Intl.NumberFormat('en-US');
 const controls = {
   baseGasShare: document.querySelector('#base-gas'), baseEvShare: document.querySelector('#base-ev'),
@@ -18,6 +20,7 @@ const controls = {
   evRebate: document.querySelector('#ev-rebate'), transitFare: document.querySelector('#transit-fare')
 };
 let defaults, simulatedYears, activeRequest, lastResult;
+let initializing = false;
 let requestId = 0;
 const chart = typeof globalThis.Chart === 'function' ? new globalThis.Chart(document.querySelector('#behavior-chart'), {
   type: 'bar',
@@ -28,22 +31,20 @@ const chart = typeof globalThis.Chart === 'function' ? new globalThis.Chart(docu
   options: { responsive: true, maintainAspectRatio: false,
     scales: { y: { beginAtZero: true, max: 100, ticks: { callback: value => `${value}%` } } },
     plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: {
-      label: context => `${context.dataset.label}: ${context.raw.toFixed(3)}% (about ${numberFormatter.format(Math.round(context.raw / 100 * HOUSEHOLD_COUNT))} household equivalents)`
+      label: context => `${context.dataset.label}: ${context.raw.toFixed(3)}% (about ${numberFormatter.format(Math.round(context.raw / 100 * HOUSEHOLD_COUNT))} households)`
     } } }
   }
 }) : null;
 if (!chart) document.querySelector('.chart-wrap').hidden = true;
 
 function setResultState(state, detail = '') {
-  if (resultsPanel?.dataset) {
-    resultsPanel.dataset.state = state;
-    resultsPanel.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
-  }
-  if (emptyState) emptyState.hidden = state !== 'empty';
-  if (loadingState) loadingState.hidden = state !== 'loading';
-  if (errorState) errorState.hidden = state !== 'error';
-  if (resultsContent) resultsContent.hidden = !(state === 'success' || (state === 'error' && lastResult));
-  if (detail && errorStateDetail) errorStateDetail.textContent = detail;
+  resultsPanel.dataset.state = state;
+  resultsPanel.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
+  emptyState.hidden = state !== 'empty';
+  loadingState.hidden = state !== 'loading';
+  errorState.hidden = state !== 'error';
+  resultsContent.hidden = !(state === 'success' || (lastResult && (state === 'loading' || state === 'error')));
+  errorStateDetail.textContent = detail;
 }
 
 function readValues() {
@@ -69,14 +70,34 @@ function clearErrors() {
 
 function showError(error) {
   const messages = [];
-  for (const [key, values] of Object.entries(error.fieldErrors ?? {})) {
+  for (const key of Object.keys(error.fieldErrors ?? {})) {
     if (Object.hasOwn(controls, key)) {
-      controls[key].setCustomValidity(values.join(' ')); controls[key].setAttribute('aria-invalid', 'true');
-      messages.push(`${controls[key].labels[0].textContent}: ${values.join(' ')}`);
+      const input = controls[key];
+      const label = input.labels[0].textContent.trim();
+      const value = input.valueAsNumber;
+      let message;
+      if (input.value.trim() === '' || !Number.isFinite(value)) message = `Enter a number for ${label.toLowerCase()}.`;
+      else if (key.startsWith('base')) message = `${label} must be between ${input.min}% and ${input.max}%.`;
+      else message = `${label} must be between $${numberFormatter.format(Number(input.min))} and $${numberFormatter.format(Number(input.max))}.`;
+      input.setCustomValidity(message); input.setAttribute('aria-invalid', 'true');
+      messages.push(message);
     }
   }
-  errorMessage.textContent = [error.message, error.formError, ...messages].filter(Boolean).join(' ');
+  const values = readValues();
+  const total = values.baseGasPct + values.baseEvPct + values.baseNoCarPct;
+  if (error.formError && Number.isFinite(total) && Math.abs(total - 100) > 1e-6)
+    messages.push('The starting percentages must add up to 100%.');
+  let summary = 'Something went wrong. Please try again.';
+  if (error instanceof ApiError) {
+    if (error.code === 'network_error') summary = "We couldn't reach the simulator. Check your connection and try again.";
+    else if (error.code === 'invalid_response') summary = "We couldn't read the simulation results. Please try again.";
+    else if (error.status === 400) summary = messages.length ? 'Please check your entries.' : "We couldn't use those values. Please check your entries and try again.";
+    else if (error.status === 429) summary = 'The simulator is busy. Please wait a moment and try again.';
+    else summary = "We couldn't complete the simulation. Please try again.";
+  }
+  errorMessage.textContent = [summary, ...messages].join(' ');
   errorMessage.hidden = false;
+  return errorMessage.textContent;
 }
 
 function setTotalStatus(values) {
@@ -86,18 +107,23 @@ function setTotalStatus(values) {
   status.classList.toggle('invalid', !Number.isFinite(total) || Math.abs(total - 100) > 1e-6);
 }
 
-function signedPoints(value) { return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)} pp`; }
-function signedHouseholds(value) { return `${value >= 0 ? '+' : '−'}${numberFormatter.format(Math.abs(Math.round(value / 100 * HOUSEHOLD_COUNT)))} household equivalents`; }
+function signedPoints(value) {
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded).toFixed(1)} pp`;
+}
+function signedHouseholds(value) {
+  const rounded = Math.round(value / 100 * HOUSEHOLD_COUNT);
+  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${numberFormatter.format(Math.abs(rounded))} estimated households`;
+}
 
 function renderResults(values, result) {
-  lastResult = result;
+  lastResult = { values, result };
   const baseline = [values.baseGasPct, values.baseEvPct, values.baseNoCarPct];
   const policy = [result.gasPct, result.evPct, result.noCarPct];
   const labels = ['Gas vehicle', 'EV', 'No car'];
   const changes = policy.map((value, index) => value - baseline[index]);
   const largestIndex = changes.reduce((best, value, index) => Math.abs(value) > Math.abs(changes[best]) ? index : best, 0);
   const largest = changes[largestIndex];
-  if (chart) { chart.data.datasets[0].data = baseline; chart.data.datasets[1].data = policy; chart.update(); }
   document.querySelector('#headline-title').textContent = Math.abs(largest) < 1e-8 ? 'No change in transportation mix' : `${labels[largestIndex]} share ${largest < 0 ? 'decreased' : 'increased'}`;
   document.querySelector('#headline-detail').textContent = `${signedPoints(largest)} · ${signedHouseholds(largest)} compared with the starting mix.`;
   ['gas', 'ev', 'no-car'].forEach((key, index) => {
@@ -112,9 +138,13 @@ function renderResults(values, result) {
     return row;
   });
   document.querySelector('#results-table-body').replaceChildren(...rows);
-  document.querySelector('#result-inputs').textContent = `Results for starting shares ${baseline.map(value => value.toFixed(3)).join(' / ')}%; gas tax +$${values.gasTax}/gallon; rebate $${values.evRebate}; fare $${values.transitFare}/ride.`;
+  document.querySelector('#result-inputs').textContent = `Starting population: gas ${baseline[0].toFixed(3)}%, EV ${baseline[1].toFixed(3)}%, no car ${baseline[2].toFixed(3)}%. Policy: gas tax +$${values.gasTax}/gallon; EV rebate $${numberFormatter.format(values.evRebate)}; transit fare $${values.transitFare}/ride.`;
   setResultState('success');
-  document.querySelectorAll('[data-results]').forEach(element => { element.hidden = false; });
+  // Chart.js must measure the visible results container, including after reset.
+  if (chart) {
+    chart.data.datasets[0].data = baseline; chart.data.datasets[1].data = policy;
+    chart.resize(); chart.update();
+  }
   resultStatus.textContent = `Simulation complete · ${simulatedYears}-year estimate`;
 }
 
@@ -124,11 +154,22 @@ function setFormValues(request) {
 }
 
 function stopRequest() { requestId++; activeRequest?.abort(); activeRequest = undefined; }
-function ready() { runButton.disabled = !defaults; runButton.querySelector('span').textContent = 'Run simulation'; }
+function ready() {
+  runButton.disabled = !defaults || initializing || Boolean(activeRequest);
+  retryButton.disabled = initializing || Boolean(activeRequest);
+  runButton.querySelector('span').textContent = activeRequest ? 'Running…' : 'Run simulation';
+}
+
+function resultSummary() {
+  if (!lastResult) return 'Ready · Run a scenario to see results';
+  const current = readValues();
+  return Object.keys(lastResult.values).some(key => current[key] !== lastResult.values[key])
+    ? 'Inputs changed · Run again to update the displayed result' : `Simulation complete · ${simulatedYears}-year estimate`;
+}
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  if (!defaults || activeRequest) return;
+  if (!defaults || initializing || activeRequest) return;
   clearErrors();
   const values = readValues();
   let request;
@@ -145,11 +186,13 @@ form.addEventListener('submit', async event => {
     if (id === requestId) renderResults(values, result);
   } catch (error) {
     if (id !== requestId) return;
-    if (error instanceof ApiError && error.code === 'cancelled') return;
+    if (error instanceof ApiError && error.code === 'cancelled') {
+      setResultState(lastResult ? 'success' : 'empty'); resultStatus.textContent = resultSummary(); return;
+    }
     if (!(error instanceof ApiError)) console.error(error);
-    showError(error instanceof ApiError ? error : new Error('The simulation could not be completed.'));
+    const detail = showError(error);
     resultStatus.textContent = lastResult ? 'Simulation failed · Showing previous result' : 'Simulation failed';
-    setResultState('error', 'Check the connection or input values and try again.');
+    setResultState('error', detail);
   } finally { if (id === requestId) { activeRequest = undefined; ready(); } }
 });
 
@@ -157,20 +200,33 @@ document.querySelector('#reset-button').addEventListener('click', () => {
   stopRequest(); clearErrors(); lastResult = undefined;
   if (defaults) setFormValues(defaults);
   setResultState('empty');
-  document.querySelectorAll('[data-results]').forEach(element => { element.hidden = true; });
-  resultStatus.textContent = defaults ? 'Ready · Run a scenario to see results' : 'Connect to the backend to load defaults';
+  resultStatus.textContent = defaults ? 'Ready · Run a scenario to see results' : 'The simulator is not ready yet. Please try again.';
+  if (!defaults && !initializing) setResultState('error', "We couldn't load the simulator. Please try again.");
   ready();
 });
-for (const input of Object.values(controls)) input.addEventListener('input', () => {
-  clearErrors(); setTotalStatus(readValues());
-  if (lastResult && !activeRequest) resultStatus.textContent = 'Inputs changed · Run again to update the displayed result';
-});
+for (const input of Object.values(controls)) {
+  input.setAttribute('aria-describedby', 'form-error');
+  input.addEventListener('input', () => {
+    clearErrors(); setTotalStatus(readValues());
+    if (!activeRequest && defaults) {
+      setResultState(lastResult ? 'success' : 'empty'); resultStatus.textContent = resultSummary();
+    }
+  });
+}
 window.addEventListener('pagehide', stopRequest);
-window.addEventListener('pageshow', event => { if (event.persisted) { ready(); resultStatus.textContent = 'Ready · Run a scenario to see results'; } });
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
+  ready();
+  if (!defaults && !initializing) { initialize(); return; }
+  setResultState(lastResult ? 'success' : 'empty'); resultStatus.textContent = resultSummary();
+  if (chart && lastResult) { chart.resize(); chart.update(); }
+});
 
 async function initialize() {
-  const retry = document.querySelector('#retry-connection');
-  retry.hidden = true; retry.disabled = true;
+  if (initializing) return;
+  initializing = true;
+  retryConnection.hidden = true; retryConnection.disabled = true;
+  ready(); resultStatus.textContent = 'Getting the simulator ready…';
   clearErrors();
   try {
     const config = await getConfig(); defaults = config.defaults; simulatedYears = config.simulatedYears;
@@ -178,14 +234,20 @@ async function initialize() {
       const factor = field.startsWith('base') ? 100 : 1;
       input.min = config.inputs[field].min * factor; input.max = config.inputs[field].max * factor;
     }
-    setFormValues(defaults); resultStatus.textContent = 'Ready · Run a scenario to see results';
+    setFormValues(defaults); setResultState(lastResult ? 'success' : 'empty');
+    resultStatus.textContent = resultSummary();
   } catch (error) {
     if (!(error instanceof ApiError)) console.error(error);
-    showError(error instanceof ApiError ? error : new Error('Could not load API configuration.'));
-    resultStatus.textContent = 'Backend connection unavailable'; retry.hidden = false;
-    setResultState('error', 'The backend configuration could not be loaded. Start the server and try again.');
-  } finally { retry.disabled = false; ready(); }
+    showError(error);
+    resultStatus.textContent = 'Unable to get started'; retryConnection.hidden = false;
+    setResultState('error', "We couldn't load the simulator. Please try again.");
+  } finally { initializing = false; retryConnection.disabled = false; ready(); }
 }
-document.querySelector('#retry-connection').addEventListener('click', initialize);
+function retry() {
+  if (initializing || activeRequest) return;
+  return defaults ? form.requestSubmit() : initialize();
+}
+retryConnection.addEventListener('click', retry);
+retryButton.addEventListener('click', retry);
 setResultState('empty');
 initialize();

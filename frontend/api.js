@@ -72,7 +72,7 @@ export function createApi({ baseUrl = '/api', fetchImpl = globalThis.fetch } = {
       text = await response.text();
     } catch (error) {
       if (signal?.aborted) throw new ApiError(0, 'Request cancelled.', { code: 'cancelled' });
-      if (error instanceof TypeError) throw new ApiError(0, "Can't reach the simulator. Is the backend running?", { code: 'network_error' });
+      if (error instanceof TypeError) throw new ApiError(0, "We couldn't reach the simulator. Check your connection and try again.", { code: 'network_error' });
       throw error;
     }
     let data;

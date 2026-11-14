@@ -33,4 +33,8 @@ Render only gasPct,evPct,noCarPct against the submitted starting mix. Net differ
 
 Reset aborts/invalidates old callbacks, restores server defaults, clears errors and hides output. Errors preserve inputs and previous good results. Only the latest request may render or clean up loading state; cached navigation restores readiness. All server messages use textContent.
 
+The current markup groups output under #results-content and uses #empty-state, #loading-state and #error-state inside #results-panel. One state setter owns visibility and aria-busy; do not override it with broad data-results toggles. Both retry buttons reload configuration when needed, otherwise retry through form submission. Reveal results before Chart.js resize/update. The separate results table works without the chart library.
+
+Retain the short percentage hint. Explain invalid entries in plain language, using percent and currency units only when needed. API diagnostics belong in developer interfaces, not product copy. Tests read the actual HTML IDs, labels and initial hidden states, including retry and cached-navigation transitions.
+
 The [old household/React proposal](../archive/household-implementation-plan.md) is historical only. No household generator, cost/emissions model, scenario persistence, frontend framework migration, or local policy calculation is added here.

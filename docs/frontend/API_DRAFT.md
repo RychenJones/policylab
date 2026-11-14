@@ -10,6 +10,7 @@ Authoritative contract for the current six-input plain JavaScript frontend and C
 - Validate both boundaries and return whitelisted output only. Never expose internal model state or exception details.
 - Preserve submitted inputs and previous good results on failure. Only the current request may update UI state, including cleanup.
 - Display server messages as text. Separate cancellation from network and HTTP failures.
+- Keep implementation language out of user-facing copy. Translate API diagnostics into ordinary simulation, connection, and input messages; show percentage errors in percent units rather than wire fractions. Explain specific limits when an entry fails, not beside every field.
 - The model estimates aggregate shares. Household equivalents use a display scale of 5,000; they are not simulated people or observed switching counts.
 
 ## Routes
