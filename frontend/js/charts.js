@@ -8,16 +8,19 @@ export function createCharts(document, numberFormatter, householdCount) {
     return { chart: null, yearlyChart: null };
   }
 
+  let currentHouseholdCount = householdCount;
+  const categoryColors = ['#2b7967', '#e59051', '#7b9db8'];
+  const fadedCategoryColors = ['#b8d6cc', '#f3c6a3', '#bfd0df'];
   const chart = new globalThis.Chart(document.querySelector('#behavior-chart'), {
     type: 'bar',
-    data: { labels: ['Gas vehicle', 'EV', 'No car'], datasets: [
-      { label: 'Starting population', data: [0, 0, 0], backgroundColor: '#9bb9d1', borderRadius: 6, maxBarThickness: 46 },
-      { label: 'Policy result', data: [0, 0, 0], backgroundColor: '#2b7967', borderRadius: 6, maxBarThickness: 46 }
+    data: { labels: ['Gas vehicle', 'Electric Vehicle', 'No car'], datasets: [
+      { label: 'Starting population', data: [0, 0, 0], backgroundColor: fadedCategoryColors, borderRadius: 6, maxBarThickness: 46 },
+      { label: 'Policy result', data: [0, 0, 0], backgroundColor: categoryColors, borderRadius: 6, maxBarThickness: 46 }
     ] },
     options: { responsive: true, maintainAspectRatio: false,
       scales: { y: { beginAtZero: true, max: 100, ticks: { callback: value => `${value}%` } } },
       plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: {
-        label: context => `${context.dataset.label}: ${context.raw.toFixed(3)}% (about ${numberFormatter.format(Math.round(context.raw / 100 * householdCount))} households)`
+        label: context => `${context.dataset.label}: ${context.raw.toFixed(3)}% (about ${numberFormatter.format(Math.round(context.raw / 100 * currentHouseholdCount))} households)`
       } } }
     }
   });
@@ -26,7 +29,7 @@ export function createCharts(document, numberFormatter, householdCount) {
     type: 'line',
     data: { labels: [], datasets: [
       { label: 'Gas vehicle', data: [], borderColor: '#2b7967', backgroundColor: '#2b7967', tension: .25, pointRadius: 4, pointHoverRadius: 6 },
-      { label: 'EV', data: [], borderColor: '#e59051', backgroundColor: '#e59051', tension: .25, pointRadius: 4, pointHoverRadius: 6 },
+      { label: 'Electric Vehicle', data: [], borderColor: '#e59051', backgroundColor: '#e59051', tension: .25, pointRadius: 4, pointHoverRadius: 6 },
       { label: 'No car', data: [], borderColor: '#7b9db8', backgroundColor: '#7b9db8', tension: .25, pointRadius: 4, pointHoverRadius: 6 }
     ] },
     options: { responsive: true, maintainAspectRatio: false,
@@ -35,7 +38,7 @@ export function createCharts(document, numberFormatter, householdCount) {
     }
   });
 
-  return { chart, yearlyChart };
+  return { chart, yearlyChart, setHouseholdCount: count => { currentHouseholdCount = count; } };
 }
 
 export function updateCharts({ chart, yearlyChart }, baseline, policy, years) {
