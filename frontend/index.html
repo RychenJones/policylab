@@ -3,186 +3,69 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Explore how transportation policies could affect 5,000 simulated households." />
-    <title>Policy Lab | Transportation Simulation</title>
+    <meta name="description" content="Explore a transportation policy scenario across 5,000 households." />
+    <title>Policy Lab | Transportation Simulator</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="app.js" defer></script>
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="#top" aria-label="Policy Lab home">
-        <span class="brand-mark" aria-hidden="true">P</span>
-        <span>Policy Lab</span>
-      </a>
-      <div class="model-status">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span>Exploratory model</span>
-      </div>
+      <a class="brand" href="#top" aria-label="Policy Lab home"><span class="brand-mark" aria-hidden="true">P</span><span>Policy Lab</span></a>
+      <span class="model-status"><span class="status-dot" aria-hidden="true"></span> MVP simulator</span>
     </header>
 
     <main id="top" class="app-shell">
-      <section class="hero" aria-labelledby="page-title">
+      <section class="hero">
         <div>
           <p class="eyebrow">Transportation policy simulator</p>
-          <h1 id="page-title">See a policy’s ripple effects.</h1>
-          <p class="hero-copy">
-            Adjust three policy levers and explore how they could affect 5,000
-            simulated households.
-          </p>
+          <h1>See a policy's ripple effects.</h1>
+          <p class="hero-copy">Set a starting population, test three policy levers, and compare the resulting transportation mix across 5,000 households.</p>
         </div>
-        <div class="hero-note">
-          <span class="hero-note-icon" aria-hidden="true">⌁</span>
-          <span>Results are estimates based on simplified assumptions.</span>
-        </div>
+        <div class="hero-note"><span aria-hidden="true">i</span><span>Results are exploratory estimates based on simplified assumptions.</span></div>
       </section>
 
       <section class="workspace" aria-label="Policy simulation workspace">
         <aside class="card controls-card">
-          <div class="section-heading">
-            <div>
-              <p class="section-kicker">Step 1</p>
-              <h2>Set policy levers</h2>
-            </div>
-            <span class="household-badge">5,000 households</span>
-          </div>
-
-          <form id="policy-form" novalidate>
-            <div class="field-group">
-              <label for="gas-tax">Gas tax increase</label>
-              <div class="input-with-unit">
-                <span>$</span>
-                <input id="gas-tax" name="gasTaxUsdPerGallon" type="number" min="0" max="10" step="0.05" value="1.00" required />
-                <span class="unit">/ gallon</span>
-              </div>
-              <input class="range-input" data-target="gas-tax" type="range" min="0" max="10" step="0.05" value="1" aria-label="Gas tax increase slider" />
-              <div class="range-labels"><span>$0</span><span>$10</span></div>
-            </div>
-
-            <div class="field-group">
-              <label for="ev-rebate">EV rebate</label>
-              <div class="input-with-unit">
-                <span>$</span>
-                <input id="ev-rebate" name="evRebateUsd" type="number" min="0" max="20000" step="250" value="7500" required />
-                <span class="unit">per vehicle</span>
-              </div>
-              <input class="range-input" data-target="ev-rebate" type="range" min="0" max="20000" step="250" value="7500" aria-label="EV rebate slider" />
-              <div class="range-labels"><span>$0</span><span>$20k</span></div>
-            </div>
-
-            <div class="field-group">
-              <label for="transit-fare">Public transit fare</label>
-              <div class="input-with-unit">
-                <span>$</span>
-                <input id="transit-fare" name="publicTransitFareUsdPerRide" type="number" min="0" max="15" step="0.25" value="2.50" required />
-                <span class="unit">per ride</span>
-              </div>
-              <input class="range-input" data-target="transit-fare" type="range" min="0" max="15" step="0.25" value="2.5" aria-label="Public transit fare slider" />
-              <div class="range-labels"><span>$0</span><span>$15</span></div>
-            </div>
-
-            <div class="field-group compact-field">
-              <label for="seed">Scenario seed <span class="optional">optional</span></label>
-              <input id="seed" name="seed" type="number" min="-2147483648" max="2147483647" step="1" value="2026" />
-              <p class="field-help">Keep the seed the same to compare policies fairly.</p>
-            </div>
-
+          <div class="section-heading"><div><p class="section-kicker">Step 1</p><h2>Define the scenario</h2></div><span class="household-badge">5,000 households</span></div>
+          <form id="simulation-form" novalidate>
+            <fieldset>
+              <legend>Starting population</legend>
+              <p class="fieldset-help">These values must add up to 100%.</p>
+              <div class="input-row"><label for="base-gas">Gas vehicle</label><div class="percent-input"><input id="base-gas" type="number" min="0" max="100" step="0.001" value="88.592" required /><span>%</span></div></div>
+              <div class="input-row"><label for="base-ev">EV</label><div class="percent-input"><input id="base-ev" type="number" min="0" max="100" step="0.001" value="1.808" required /><span>%</span></div></div>
+              <div class="input-row"><label for="base-no-car">No car</label><div class="percent-input"><input id="base-no-car" type="number" min="0" max="100" step="0.001" value="10" required /><span>%</span></div></div>
+              <p id="baseline-total" class="total-status">Total: 100.000%</p>
+            </fieldset>
+            <fieldset>
+              <legend>Policy values</legend>
+              <div class="field-group"><label for="gas-tax">Gas tax increase</label><div class="money-input"><span>$</span><input id="gas-tax" type="number" min="0" max="10" step="0.05" value="1" required /><span>/ gallon</span></div></div>
+              <div class="field-group"><label for="ev-rebate">EV rebate</label><div class="money-input"><span>$</span><input id="ev-rebate" type="number" min="0" max="20000" step="250" value="7500" required /><span>per vehicle</span></div></div>
+              <div class="field-group"><label for="transit-fare">Transit fare</label><div class="money-input"><span>$</span><input id="transit-fare" type="number" min="0" max="15" step="0.25" value="1.75" required /><span>/ ride</span></div></div>
+            </fieldset>
             <p id="form-error" class="form-error" role="alert" hidden></p>
-            <button class="primary-button" type="submit">
-              <span>Run simulation</span>
-              <span aria-hidden="true">→</span>
-            </button>
-            <button id="reset-button" class="text-button" type="button">Reset to example</button>
+            <button id="run-button" class="primary-button" type="submit"><span>Run simulation</span><span aria-hidden="true">→</span></button>
+            <button id="reset-button" class="text-button" type="button">Reset example</button>
           </form>
         </aside>
 
         <section class="results-column" aria-live="polite">
-          <div class="results-heading">
-            <div>
-              <p class="section-kicker">Step 2</p>
-              <h2>Population impact</h2>
-            </div>
-            <p id="result-status" class="result-status">Example scenario · Seed 2026</p>
-          </div>
-
-          <div class="metric-grid">
-            <article class="metric-card">
-              <span class="metric-label">Households switching behavior</span>
-              <strong id="switching-value">2,200</strong>
-              <span id="switching-change" class="metric-change positive">44.0% of population</span>
-            </article>
-            <article class="metric-card">
-              <span class="metric-label">Average annual cost change</span>
-              <strong id="cost-value">+$215</strong>
-              <span class="metric-change neutral">per household</span>
-            </article>
-            <article class="metric-card">
-              <span class="metric-label">Estimated emissions change</span>
-              <strong id="emissions-value">−125k</strong>
-              <span id="emissions-unit" class="metric-change positive">kg CO₂e / year</span>
-            </article>
-          </div>
-
-          <div class="chart-grid">
-            <article class="card chart-card behavior-card">
-              <div class="card-heading">
-                <div>
-                  <p class="section-kicker">Household outcomes</p>
-                  <h3>How behavior changes</h3>
-                </div>
-                <span class="legend-note"><span class="legend-swatch baseline"></span> baseline <span class="legend-swatch policy"></span> policy</span>
-              </div>
-              <div id="behavior-chart" class="bar-chart" role="img" aria-label="Household transportation behavior comparison"></div>
-            </article>
-
-            <article class="card chart-card cost-card">
-              <div class="card-heading">
-                <div>
-                  <p class="section-kicker">Distribution</p>
-                  <h3>Impact by income group</h3>
-                </div>
-              </div>
-              <div id="income-chart" class="income-chart" role="img" aria-label="Average annual cost change by income group"></div>
-              <p class="chart-footnote">Estimated average annual household cost change</p>
-            </article>
-          </div>
-
-          <article class="card assumptions-card">
-            <div class="assumptions-icon" aria-hidden="true">i</div>
-            <div>
-              <h3>How to read this simulation</h3>
-              <p>
-                This model uses synthetic households and simplified decision rules.
-                It is intended for exploring scenarios, not predicting real-world
-                outcomes. Results may change as the model improves.
-              </p>
-            </div>
-            <button id="assumptions-button" class="text-button" type="button">View assumptions</button>
+          <div class="results-heading"><div><p class="section-kicker">Step 2</p><h2>Population impact</h2></div><p id="result-status" class="result-status">Preview data</p></div>
+          <article class="headline-card"><div class="headline-icon" aria-hidden="true">↗</div><div><p class="section-kicker">Largest behavioral change</p><h2 id="headline-title">Gas vehicle use decreased</h2><p id="headline-detail">Compared with the starting population.</p></div></article>
+          <article class="card chart-card">
+            <div class="card-heading"><div><p class="section-kicker">Household outcomes</p><h3>Starting population vs. policy result</h3></div><span class="chart-note">5,000 households</span></div>
+            <div class="chart-wrap"><canvas id="behavior-chart" aria-label="Bar chart comparing starting and policy transportation outcomes"></canvas></div>
+            <p class="chart-footnote">Bars show percentages. Hover over a bar to see the estimated household count.</p>
           </article>
+          <div class="metric-grid">
+            <article class="metric-card"><span class="metric-label">Gas vehicle change</span><strong id="gas-change">−16.2 pp</strong><span id="gas-count" class="metric-support">810 fewer households</span></article>
+            <article class="metric-card"><span class="metric-label">EV change</span><strong id="ev-change">+16.3 pp</strong><span id="ev-count" class="metric-support">815 more households</span></article>
+            <article class="metric-card"><span class="metric-label">No-car change</span><strong id="no-car-change">−0.1 pp</strong><span id="no-car-count" class="metric-support">5 fewer households</span></article>
+          </div>
+          <article class="card assumptions-card"><div class="assumptions-icon" aria-hidden="true">i</div><div><h3>How to read this simulation</h3><p>The starting values come from the scenario you entered. The backend returns the policy-result percentages. Counts are estimated by multiplying each percentage by 5,000.</p></div></article>
         </section>
       </section>
     </main>
-
-    <footer class="footer">
-      <span>Policy Lab · MVP</span>
-      <span>Model version 0.1 · Synthetic population</span>
-    </footer>
-
-    <dialog id="assumptions-dialog" class="assumptions-dialog">
-      <div class="dialog-heading">
-        <div>
-          <p class="section-kicker">Model notes</p>
-          <h2>Current assumptions</h2>
-        </div>
-        <button id="close-dialog" class="close-button" type="button" aria-label="Close assumptions">×</button>
-      </div>
-      <ul>
-        <li>The population contains 5,000 independently modeled households.</li>
-        <li>Household characteristics are synthetic and randomized.</li>
-        <li>Each household receives one primary transportation outcome.</li>
-        <li>Cost and emissions results are annual estimates.</li>
-        <li>Policy results are exploratory and should not be treated as forecasts.</li>
-      </ul>
-    </dialog>
-
-    <script src="app.js"></script>
+    <footer class="footer"><span>Policy Lab · MVP</span><span>Aggregate transportation model</span></footer>
   </body>
 </html>
