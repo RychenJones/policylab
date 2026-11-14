@@ -45,7 +45,6 @@ public static class WebHost
         app.MapGet("/api/config", () => Results.Json(new
         {
             defaults = ApiBoundary.Defaults, inputs = ApiBoundary.Inputs,
-            simulatedYears = Simulator.Cfg.SimulatedYears,
             assumptions = new[] {
                 "Deterministic aggregate model; exploratory estimates, not forecasts.",
                 "Starting shares are fractions and must sum to 1. Each category must be at least 0.001% for calibration.",

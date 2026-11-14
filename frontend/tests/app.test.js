@@ -61,6 +61,9 @@ async function page({ configFailures = 0, chartAvailable = false } = {}) {
     sendSimulation: (request, options) => new Promise((resolve, reject) => calls.push({ request, options, resolve, reject }))
   });
   await flush();
+  // The production form intentionally leaves the horizon blank; provide a value
+  // here so the existing interaction tests can exercise successful submissions.
+  get('#simulated-years').value = '5';
   return { get, calls, events, charts, configCalls: () => configCalls, submit: () => get('#simulation-form').fire('submit') };
 }
 
@@ -85,9 +88,9 @@ test('blank, zero-share, and incorrect-total inputs show user units and send not
   assert.match(p.get('#form-error').textContent, /add up to 100%/); assert.equal(p.calls.length, 0);
 });
 
-test('real form converts six values and reveals the result before Chart.js measures it', async () => {
+test('real form converts seven values and reveals the result before Chart.js measures it', async () => {
   const p = await page({ chartAvailable: true }); const pending = p.submit();
-  assert.deepEqual(JSON.parse(JSON.stringify(p.calls[0].request)), defaults);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.calls[0].request)), { ...defaults, simulatedYears: 5 });
   assert.equal(p.get('#loading-state').hidden, false); assert.equal(p.get('#results-panel').attributes['aria-busy'], 'true');
   p.calls[0].resolve(output); await pending;
   assert.equal(p.get('#results-content').hidden, false); assert.equal(p.get('#loading-state').hidden, true);
@@ -135,6 +138,7 @@ test('last successful result stays visible through loading and failure with its 
 test('reset and cached navigation clear loading; stale callbacks cannot overwrite a newer request', async () => {
   const p = await page(); const first = p.submit(); p.get('#reset-button').fire('click');
   assert.equal(p.calls[0].options.signal.aborted, true); assert.equal(p.get('#results-content').hidden, true);
+  p.get('#simulated-years').value = '5';
   const second = p.submit(); p.calls[0].resolve(output); await first;
   assert.equal(p.get('#loading-state').hidden, false); assert.equal(p.get('#run-button').disabled, true);
   p.events.pagehide(); p.calls[1].reject(new ApiError(0, 'Cancelled', { code: 'cancelled' })); await second;

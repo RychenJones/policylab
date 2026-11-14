@@ -92,13 +92,11 @@ public static class Simulator
         return new State(newMode);
     }
 
-    // Runs the configured number of years and returns final travel shares.
-    public static Result Simulate(double gasTax, double evRebate, double transitFare)
-        => Simulate(Cfg, gasTax, evRebate, transitFare);
-
-    // A request supplies its own immutable configuration and calibration. Never
+    // Runs the requested number of years and returns final travel shares.
+    // A request supplies its own immutable configuration and horizon. Never
     // mutate Cfg or reuse another scenario's fitted baseline parameters.
     public static Result Simulate(Config cfg, double gasTax, double evRebate, double transitFare,
+                                  int simulatedYears,
                                   CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -106,7 +104,7 @@ public static class Simulator
         var state = new State(cfg.BaseShare);
 
         // Apply the same policy inputs once for each simulated year.
-        for (int year = 0; year < cfg.SimulatedYears; year++)
+        for (int year = 0; year < simulatedYears; year++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             state = Step(cfg, calibrated, state, gasTax, evRebate, transitFare);
@@ -119,6 +117,7 @@ public static class Simulator
     }
 
     // Returns the percentage-point change compared with the no-policy baseline.
-    public static Result CalculatePolicyEffect(double gasTax, double evRebate, double transitFare) =>
-        Simulate(gasTax, evRebate, transitFare) - Simulate(0.0, 0.0, Cfg.BaseFare);
+    public static Result CalculatePolicyEffect(double gasTax, double evRebate, double transitFare, int simulatedYears) =>
+        Simulate(Cfg, gasTax, evRebate, transitFare, simulatedYears) -
+        Simulate(Cfg, 0.0, 0.0, Cfg.BaseFare, simulatedYears);
 }

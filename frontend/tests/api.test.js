@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ApiError, createApi, INPUT_RULES, sanitizeRequest, sanitizeResult } from '../api.js';
 
-const input = { baseGasShare: 0.88592, baseEvShare: 0.01808, baseNoCarShare: 0.096, gasTax: 1, evRebate: 7500, transitFare: 1.75 };
+const input = { baseGasShare: 0.88592, baseEvShare: 0.01808, baseNoCarShare: 0.096, gasTax: 1, evRebate: 7500, transitFare: 1.75, simulatedYears: 5 };
 const result = { gasPct: 80, evPct: 10, noCarPct: 10 };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
-test('requestSimulation sends exactly six validated numeric fields to POST /api/simulate', async () => {
+test('requestSimulation sends exactly seven validated numeric fields to POST /api/simulate', async () => {
   const api = createApi({ fetchImpl: async (url, options) => {
     assert.equal(url, '/api/simulate'); assert.equal(options.method, 'POST');
     assert.deepEqual(JSON.parse(options.body), input);

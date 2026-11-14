@@ -2,9 +2,11 @@ export const INPUT_RULES = Object.freeze({
   baseGasShare: { min: 0.00001, max: 0.99998 },
   baseEvShare: { min: 0.00001, max: 0.99998 },
   baseNoCarShare: { min: 0.00001, max: 0.99998 },
-  gasTax: { min: 0, max: 10 }, evRebate: { min: 0, max: 20000 }, transitFare: { min: 0, max: 15 }
+  gasTax: { min: 0, max: 10 }, evRebate: { min: 0, max: 20000 }, transitFare: { min: 0, max: 15 },
+  simulatedYears: { min: 1, max: 100 }
 });
 const fields = Object.keys(INPUT_RULES);
+const integerFields = new Set(['simulatedYears']);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const finite = value => typeof value === 'number' && Number.isFinite(value);
 
@@ -17,11 +19,11 @@ export class ApiError extends Error {
 
 export function sanitizeRequest(request) {
   const errors = {}, clean = {};
-  if (!object(request)) throw new ApiError(400, 'Invalid scenario.', { code: 'validation_failed', formError: 'Send the six scenario fields.' });
+  if (!object(request)) throw new ApiError(400, 'Invalid scenario.', { code: 'validation_failed', formError: 'Send the seven scenario fields.' });
   if (Object.keys(request).some(key => !fields.includes(key))) errors.body = ['Unknown scenario field.'];
   for (const field of fields) {
     const value = request[field], rule = INPUT_RULES[field];
-    if (!Object.hasOwn(request, field) || !finite(value) || value < rule.min || value > rule.max)
+    if (!Object.hasOwn(request, field) || !finite(value) || (integerFields.has(field) && !Number.isInteger(value)) || value < rule.min || value > rule.max)
       errors[field] = [`Enter a finite number from ${rule.min} to ${rule.max}.`];
     else clean[field] = value;
   }
@@ -44,11 +46,16 @@ export function sanitizeResult(value) {
 }
 
 function sanitizeConfig(value) {
-  if (!object(value) || !object(value.inputs) || !Number.isInteger(value.simulatedYears) || value.simulatedYears < 1
-    || !Array.isArray(value.assumptions) || !value.assumptions.every(item => typeof item === 'string'))
+  if (!object(value) || !object(value.inputs) || !Array.isArray(value.assumptions)
+    || !value.assumptions.every(item => typeof item === 'string'))
     throw new ApiError(200, 'Invalid server configuration.', { code: 'invalid_response' });
   let defaults;
-  try { defaults = sanitizeRequest(value.defaults); }
+  try {
+    // The horizon is intentionally not part of server defaults: the user must choose it.
+    const policyDefaults = sanitizeRequest({ ...value.defaults, simulatedYears: 1 });
+    delete policyDefaults.simulatedYears;
+    defaults = policyDefaults;
+  }
   catch { throw new ApiError(200, 'Invalid server defaults.', { code: 'invalid_response' }); }
   const inputs = {};
   for (const field of fields) {
@@ -57,7 +64,7 @@ function sanitizeConfig(value) {
       throw new ApiError(200, 'Server input rules do not match this client.', { code: 'invalid_response' });
     inputs[field] = { min: rule.min, max: rule.max, step: rule.step };
   }
-  return { defaults, inputs, simulatedYears: value.simulatedYears, assumptions: [...value.assumptions] };
+  return { defaults, inputs, assumptions: [...value.assumptions] };
 }
 
 export function createApi({ baseUrl = '/api', fetchImpl = globalThis.fetch } = {}) {

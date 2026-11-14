@@ -27,8 +27,8 @@
           <p class="eyebrow">Transportation policy simulator</p>
           <h1>See a policy's ripple effects.</h1>
           <p class="hero-copy">
-            Set a starting population, test three policy levers, and compare the
-            resulting transportation mix across 5,000 households.
+            Set a starting population, choose a time horizon, test three policy
+            levers, and compare the resulting transportation mix across 5,000 households.
           </p>
         </div>
         <div class="hero-note">
@@ -141,6 +141,13 @@
                     value="1.75"
                     required
                   /><span>/ ride</span>
+                </div>
+              </div>
+              <div class="field-group">
+                <label for="simulated-years">Simulation horizon</label>
+                <div class="money-input">
+                  <input id="simulated-years" type="number" min="1" max="100" step="1" required />
+                  <span>years</span>
                 </div>
               </div>
             </fieldset>

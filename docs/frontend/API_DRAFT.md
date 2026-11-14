@@ -1,6 +1,6 @@
 # Current API Contract and Rebuild Reference
 
-Authoritative contract for the current six-input plain JavaScript frontend and C# aggregate simulator. The older household proposal is [archived](../archive/household-implementation-plan.md). Its household schemas, TypeScript assumptions, and sample outputs do not define current behavior.
+Authoritative contract for the current seven-input plain JavaScript frontend and C# aggregate simulator. The older household proposal is [archived](../archive/household-implementation-plan.md). Its household schemas, TypeScript assumptions, and sample outputs do not define current behavior.
 
 ## Core principles
 
@@ -47,7 +47,7 @@ Success is 200 JSON. There are no QUERY routes, compatibility aliases, household
 
 Starting shares must sum to 1 within absolute tolerance 1e-8. All categories must be positive because calibration uses logarithmic share ratios. The minimum matches the form's 0.001% entry precision; zero-share calibration is unsupported and must not be repaired with a hidden epsilon. Zero is valid for policy inputs.
 
-All six fields are required, case-sensitive finite JSON numbers. Reject unknown/duplicate/missing fields, null, numeric strings, booleans, arrays, malformed JSON, overflowed numbers and range violations. UI steps are conveniences, not enforced multiples. Maximum request size is 16 KiB; JSON nesting depth is 8.
+All seven fields are required, case-sensitive finite JSON numbers. `simulatedYears` must be a whole number from 1 to 100. Reject unknown/duplicate/missing fields, null, numeric strings, booleans, arrays, malformed JSON, overflowed numbers and range violations. UI steps are conveniences, not enforced multiples. Maximum request size is 16 KiB; JSON nesting depth is 8.
 
 ## Three-field response
 
@@ -64,7 +64,7 @@ Round for display only. UI changes are percentage points from the entered starti
 Config contains:
 - defaults: the same six-field request. Starting shares come from Simulator.Cfg.BaseShare; policy example defaults are gasTax 1, evRebate 7500, and configured BaseFare (1.75).
 - inputs: six matching keys, each with min/max/step. Steps are 0.00001 for shares, then 0.05, 250, 0.25.
-- simulatedYears: currently 5.
+- simulatedYears: required integer from 1 to 100; it has no server or UI default.
 - assumptions: explanatory string array.
 
 The browser validates config before enabling Run. Failure offers a connection retry; no hardcoded preview or stale config fallback is used.

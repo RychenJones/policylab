@@ -1,6 +1,6 @@
 # Policy Lab
 
-The six-input plain JavaScript frontend calls C# through requestSimulation(request). There are no local preview calculations or fake result fallbacks.
+The seven-input plain JavaScript frontend calls C# through requestSimulation(request). There are no local preview calculations or fake result fallbacks.
 
 Run with the .NET 10 SDK:
 
@@ -10,7 +10,7 @@ dotnet run --project backend/TransportPolicy.csproj -- --urls http://localhost:5
 
 Open [Policy Lab](http://localhost:5080). The host serves both frontend and API. JavaScript needs no npm installation or build step. The existing Chart.js CDN enhances charts; a table remains usable without it. Rebuild/restart after frontend edits because the host serves copied output assets.
 
-Routes: GET `/api/health`, GET `/api/config`, POST `/api/simulate`. POST sends exactly `baseGasShare`, `baseEvShare`, `baseNoCarShare` (fractions summing to 1), `gasTax`, `evRebate`, `transitFare`. Response: `{ gasPct, evPct, noCarPct }`, percentages summing to 100. See [bounds and error rules](docs/frontend/API_DRAFT.md).
+Routes: GET `/api/health`, GET `/api/config`, POST `/api/simulate`. POST sends the starting shares, three policy values, and a required `simulatedYears` integer from 1 to 100. The UI does not choose a horizon for the user. Response: `{ gasPct, evPct, noCarPct }`, percentages summing to 100. See [bounds and error rules](docs/frontend/API_DRAFT.md).
 
 Both boundaries validate types, ranges and totals. C# calibrates from request-local starting shares without mutating the shared model. Each starting category must be at least 0.001% for logarithmic calibration. UI counts are explicitly equivalents at a scale of 5,000, not simulated individuals.
 
