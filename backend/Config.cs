@@ -9,7 +9,7 @@ public sealed record Config
     public double MilesPerYear { get; init; } = 12_000;
     public double Mpg { get; init; } = 26.0;
     public double KwhPerMile { get; init; } = 0.30;
-    public double ElecPrice { get; init; } = 0.17;
+    public double ElectricityPricePerKwh { get; init; } = 0.17;
     public double EvPricePremium { get; init; } = 8_000;
 
     // Baselines (ACS 2024 commuters, WFH excluded). The three shares are

@@ -21,6 +21,6 @@ public static class Program
 
         Console.WriteLine();
         Console.WriteLine("Policy effect (pp vs no policy), gas tax +$1 / rebate $7.5k / fare halved:");
-        Console.WriteLine(Simulator.PolicyEffect(1.00, 7500, fare / 2));
+        Console.WriteLine(Simulator.CalculatePolicyEffect(1.00, 7500, fare / 2));
     }
 }
