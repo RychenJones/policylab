@@ -5,6 +5,12 @@ const form = document.querySelector('#simulation-form');
 const runButton = document.querySelector('#run-button');
 const errorMessage = document.querySelector('#form-error');
 const resultStatus = document.querySelector('#result-status');
+const resultsPanel = document.querySelector('#results-panel');
+const resultsContent = document.querySelector('#results-content');
+const emptyState = document.querySelector('#empty-state');
+const loadingState = document.querySelector('#loading-state');
+const errorState = document.querySelector('#error-state');
+const errorStateDetail = document.querySelector('#error-state-detail');
 const numberFormatter = new Intl.NumberFormat('en-US');
 const controls = {
   baseGasShare: document.querySelector('#base-gas'), baseEvShare: document.querySelector('#base-ev'),
