@@ -49,16 +49,14 @@ async function runSimulation(policy) {
   const households = 5000;
   const taxPressure = policy.gasTaxUsdPerGallon / 10;
   const rebateEffect = policy.evRebateUsd / 20000;
-  const transitEffect = 1 - policy.publicTransitFareUsdPerRide / 15;
+  const noCarEffect = 1 - policy.publicTransitFareUsdPerRide / 15;
   const evShare = Math.min(.58, .08 + rebateEffect * .34 + taxPressure * .16);
-  const transitShare = Math.min(.42, .07 + transitEffect * .2 + taxPressure * .11);
-  const switching = Math.round(households * Math.min(.78, evShare + transitShare));
+  const noCarShare = Math.min(.42, .07 + noCarEffect * .2 + taxPressure * .11);
   const evHouseholds = Math.round(households * evShare);
-  const transitHouseholds = Math.round(households * transitShare);
-  const reducedDriving = Math.max(0, switching - evHouseholds - transitHouseholds);
-  const gasHouseholds = households - evHouseholds - transitHouseholds - reducedDriving;
+  const noCarHouseholds = Math.round(households * noCarShare);
+  const gasHouseholds = households - evHouseholds - noCarHouseholds;
   const costChange = Math.round(policy.gasTaxUsdPerGallon * 180 - policy.evRebateUsd * .02 + policy.publicTransitFareUsdPerRide * 16);
-  const emissionsChange = -Math.round(evHouseholds * 110 + transitHouseholds * 70 + reducedDriving * 35);
+  const emissionsChange = -Math.round(evHouseholds * 110 + noCarHouseholds * 105);
 
   return {
     appliedPolicy: policy,
@@ -67,14 +65,12 @@ async function runSimulation(policy) {
     baselineBehaviors: [
       { category: 'gas', count: households },
       { category: 'ev', count: 0 },
-      { category: 'transit', count: 0 },
-      { category: 'reducedDriving', count: 0 }
+      { category: 'noCar', count: 0 }
     ],
     policyBehaviors: [
       { category: 'gas', count: gasHouseholds },
       { category: 'ev', count: evHouseholds },
-      { category: 'transit', count: transitHouseholds },
-      { category: 'reducedDriving', count: reducedDriving }
+      { category: 'noCar', count: noCarHouseholds }
     ],
     averageAnnualCostChangeUsd: costChange,
     emissionsChange: { value: emissionsChange, unit: 'kg CO2e / year' },
@@ -101,7 +97,7 @@ function formatSignedNumber(value) {
 }
 
 function renderBehaviorChart(result) {
-  const labels = { gas: 'Gas vehicle', ev: 'EV', transit: 'Transit', reducedDriving: 'Less driving' };
+  const labels = { gas: 'Gas vehicle', ev: 'EV', noCar: 'No car' };
   const baseline = getBehaviorCounts(result, 'baselineBehaviors');
   const policy = getBehaviorCounts(result, 'policyBehaviors');
   const max = Math.max(...Object.values(baseline), ...Object.values(policy), 1);
@@ -212,8 +208,8 @@ function createExampleResult() {
   return {
     appliedPolicy: EXAMPLE_POLICY,
     householdCount: 5000,
-    baselineBehaviors: [{ category: 'gas', count: 5000 }, { category: 'ev', count: 0 }, { category: 'transit', count: 0 }, { category: 'reducedDriving', count: 0 }],
-    policyBehaviors: [{ category: 'gas', count: 2800 }, { category: 'ev', count: 900 }, { category: 'transit', count: 850 }, { category: 'reducedDriving', count: 450 }],
+    baselineBehaviors: [{ category: 'gas', count: 5000 }, { category: 'ev', count: 0 }, { category: 'noCar', count: 0 }],
+    policyBehaviors: [{ category: 'gas', count: 3650 }, { category: 'ev', count: 900 }, { category: 'noCar', count: 450 }],
     averageAnnualCostChangeUsd: 215,
     emissionsChange: { value: -125000, unit: 'kg CO2e / year' },
     incomeGroups: [
