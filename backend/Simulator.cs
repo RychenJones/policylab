@@ -9,7 +9,7 @@ public static class Simulator
     public static readonly Params Calibrated = Calibrate(Cfg);
 
     // Converts utility scores into stable choice probabilities.
-    public static double[] Softmax(double[] values)
+    public static double[] CalculateChoiceShares(double[] values)
     {
         double max = values.Max();
         double[] exps = values.Select(v => Math.Exp(v - max)).ToArray();
@@ -18,61 +18,62 @@ public static class Simulator
     }
 
     // Calculates the annual fuel cost for a gas-powered vehicle.
-    public static double GasRunningCost(Config cfg, double gasTax) =>
+    public static double AnnualGasCost(Config cfg, double gasTax) =>
         cfg.MilesPerYear * (cfg.BaseGasPrice + gasTax) / cfg.Mpg;
 
     // Calculates the annual electricity cost for an EV.
-    public static double EvRunningCost(Config cfg) =>
-        cfg.MilesPerYear * cfg.KwhPerMile * cfg.ElecPrice;
+    public static double AnnualEvCost(Config cfg) =>
+        cfg.MilesPerYear * cfg.KwhPerMile * cfg.ElectricityPricePerKwh;
 
     // Calculates the annual cost of public transit.
     public static double TransitAnnualCost(Config cfg, double fare) =>
         fare * cfg.TripsPerYear;
 
     // Calculates the EV incentive from rebates and fuel savings.
-    public static double PowertrainTerms(Config cfg, double gasTax, double evRebate)
+    public static double CalculateEvFinancialUtility(Config cfg, double gasTax, double evRebate)
     {
         double fuelSaving = cfg.FuelSavingsYears * cfg.FuelMyopia *
-                            (GasRunningCost(cfg, gasTax) - EvRunningCost(cfg));
+                            (AnnualGasCost(cfg, gasTax) - AnnualEvCost(cfg));
         return cfg.BetaRebate * (evRebate - cfg.EvPricePremium + fuelSaving);
     }
 
     // Calculates target shares for the three mutually exclusive outcomes.
-    public static Mode ModeTargetShares(Config cfg, Params p, double gasTax,
+    public static Mode CalculateTargetShares(Config cfg, Params p, double gasTax,
                                         double evRebate, double fare)
     {
-        double gasCost = GasRunningCost(cfg, gasTax);
+        double gasCost = AnnualGasCost(cfg, gasTax);
         double transitCost = TransitAnnualCost(cfg, fare);
         double[] values =
         {
             p.BetaFuel * gasCost,
-            p.AscEv + p.BetaFuel * EvRunningCost(cfg) +
-                PowertrainTerms(cfg, gasTax, evRebate),
+            p.AscEv + p.BetaFuel * AnnualEvCost(cfg) +
+                CalculateEvFinancialUtility(cfg, gasTax, evRebate),
             p.AscNoCar + p.BetaFare * transitCost
         };
-        double[] shares = Softmax(values);
+        double[] shares = CalculateChoiceShares(values);
         return new Mode(shares[0], shares[1], shares[2]);
     }
 
     // Moves the current mode shares toward the calculated target shares.
-    public static Mode AdjustToward(Mode current, Mode target, double lambda) => new(
-        current.Gas + lambda * (target.Gas - current.Gas),
-        current.Ev + lambda * (target.Ev - current.Ev),
-        current.NoCar + lambda * (target.NoCar - current.NoCar));
+    public static Mode AdjustTowardTarget(Mode current, Mode target,
+                                          double shareAdjustmentRate) => new(
+        current.Gas + shareAdjustmentRate * (target.Gas - current.Gas),
+        current.Ev + shareAdjustmentRate * (target.Ev - current.Ev),
+        current.NoCar + shareAdjustmentRate * (target.NoCar - current.NoCar));
 
     // Fits model parameters so the baseline inputs reproduce baseline shares.
     public static Params Calibrate(Config cfg)
     {
         Mode baseline = cfg.BaseShare;
-        double baseGasCost = GasRunningCost(cfg, 0.0);
-        double baseEvCost = EvRunningCost(cfg);
+        double baseGasCost = AnnualGasCost(cfg, 0.0);
+        double baseEvCost = AnnualEvCost(cfg);
         double baseTransitCost = TransitAnnualCost(cfg, cfg.BaseFare);
 
         double betaFare = cfg.EFare / (baseTransitCost * (1 - baseline.NoCar));
         double betaFuel = cfg.EFuel / (baseGasCost * (1 - baseline.Gas));
 
         double vGasBase = betaFuel * baseGasCost;
-        double vEvBase = betaFuel * baseEvCost + PowertrainTerms(cfg, 0.0, 0.0);
+        double vEvBase = betaFuel * baseEvCost + CalculateEvFinancialUtility(cfg, 0.0, 0.0);
         double ascEv = Math.Log(baseline.Ev / baseline.Gas) + vGasBase - vEvBase;
         double ascNoCar = Math.Log(baseline.NoCar / baseline.Gas) +
                           vGasBase - betaFare * baseTransitCost;
@@ -84,8 +85,8 @@ public static class Simulator
     public static State Step(Config cfg, Params p, State state,
                              double gasTax, double evRebate, double fare)
     {
-        Mode target = ModeTargetShares(cfg, p, gasTax, evRebate, fare);
-        Mode newMode = AdjustToward(state.Mode, target, cfg.ShareAdjustmentRate);
+        Mode target = CalculateTargetShares(cfg, p, gasTax, evRebate, fare);
+        Mode newMode = AdjustTowardTarget(state.Mode, target, cfg.ShareAdjustmentRate);
 
         return new State(newMode);
     }
@@ -106,6 +107,6 @@ public static class Simulator
     }
 
     // Returns the percentage-point change compared with the no-policy baseline.
-    public static Result PolicyEffect(double gasTax, double evRebate, double transitFare) =>
+    public static Result CalculatePolicyEffect(double gasTax, double evRebate, double transitFare) =>
         Simulate(gasTax, evRebate, transitFare) - Simulate(0.0, 0.0, Cfg.BaseFare);
 }

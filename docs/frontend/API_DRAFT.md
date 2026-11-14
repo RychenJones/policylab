@@ -69,7 +69,7 @@ Changes: `householdsSwitched` (counts both directions), `householdsSwitchedPerce
 - `simulatedYears`: `Cfg.SimulatedYears`, currently 5; not a request parameter.
 - `baseline`: `Simulate(0, 0, Cfg.BaseFare)`.
 - `policy`: `Simulate(gasTax, evRebate, transitFare)`.
-- `changePercentagePoints`: policy minus baseline, matching `PolicyEffect`.
+- `changePercentagePoints`: policy minus baseline, matching `CalculatePolicyEffect`.
 - `warnings`: structured extrapolation warnings; empty array when none apply.
 
 Rounding belongs to the backend DTO mapping: USD 2 decimals; total tonnes 1; per-household tonnes 2; percentages 1. Use AwayFromZero and normalize negative zero. Never round inside the underlying model. Empty-group means and zero denominators return zero. No NaN or infinity may reach the wire.
