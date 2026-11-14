@@ -16,4 +16,4 @@ Results are exploratory estimates based on placeholder assumptions, not forecast
 - Plain JavaScript remains selected. Existing charts are retained with a table fallback.
 - No database, authentication, saved scenarios or new household model is introduced.
 
-See [the current plan](docs/plan.md), [API reference](docs/frontend/API_DRAFT.md) and [README](README.md). The [historical proposal](docs/archive/household-implementation-plan.md) records earlier ideas, not current implementation.
+See [the current plan](plan.md), [API reference](../api/API_DRAFT.md) and [README](../../README.md). The [historical proposal](../archive/household-implementation-plan.md) records earlier ideas, not current implementation.

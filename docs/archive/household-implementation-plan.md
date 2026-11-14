@@ -1,6 +1,6 @@
 # Historical Household Implementation Proposal
 
-Archived: this proposal is not the implemented API, model, frontend language, or ownership contract. Use [the current plan](../plan.md) and [API reference](../frontend/API_DRAFT.md). The original text below is preserved for context; do not copy its household schemas, TypeScript assumptions, mode names, or sample outputs into the current implementation.
+Archived: this proposal is not the implemented API, model, frontend language, or ownership contract. Use [the current plan](../planning/plan.md) and [API reference](../api/API_DRAFT.md). The original text below is preserved for context; do not copy its household schemas, TypeScript assumptions, mode names, or sample outputs into the current implementation.
 
 > One-day hackathon MVP. 4 developers: BE1, BE2 (C#/.NET), FE1, FE2 (React/TypeScript).
 > This plan is the **binding contract** for schemas and the API. Sections 6–8 are the pieces everyone must agree on before coding (target: first 45 minutes).
