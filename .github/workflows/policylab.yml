@@ -2,13 +2,23 @@ name: PolicyLab CI and deployment
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - deploy/policylab-ci   # CHANGED: TEMPORARY branch-test route. Remove before the production transition.
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
   group: policylab-${{ github.ref }}
   cancel-in-progress: false
+
+# Repository variables that act as your manual approval switches (Settings > Secrets and variables > Actions > Variables):
+#   POLICYLAB_BRANCH_PUBLISH      = true  -> allow the branch to publish a test image to GHCR
+#   POLICYLAB_BRANCH_CONNECTIVITY = true  -> run the no-deploy CI connectivity check (step 4)
+#   POLICYLAB_BRANCH_DEPLOY       = true  -> allow the branch to deploy (step 5, only when YOU authorize it)
+#   ENABLE_POLICYLAB_DEPLOYMENT   = leave unset/false (main automatic deployment stays off)
+# Set a variable back to false (or delete it) after each stage.
+
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -40,9 +50,14 @@ jobs:
           test "$ready" = true
           API_TEST_URL=http://127.0.0.1:5080 node --test frontend/tests/*.test.js
           API_TEST_URL=http://127.0.0.1:5080 node --test deployment/tests/image.test.mjs
+
   publish:
     needs: verify
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # CHANGED: main as before; the test branch only while POLICYLAB_BRANCH_PUBLISH is true.
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' ||
+      (github.ref == 'refs/heads/deploy/policylab-ci' && vars.POLICYLAB_BRANCH_PUBLISH == 'true'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -70,10 +85,76 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/RychenJones/policylab
             org.opencontainers.image.revision=${{ github.sha }}
+
+  # NEW (step 4): proves the runner can join the tailnet, reach only TCP22 and hit the forced command.
+  # It never deploys. Remove it once a release exists, or keep it behind its variable.
+  connectivity:
+    needs: verify
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/deploy/policylab-ci' &&
+      vars.POLICYLAB_BRANCH_CONNECTIVITY == 'true'
+    # The environment name must match the Tailscale OIDC subject exactly.
+    environment: policylab-production
+    concurrency:
+      group: policylab-production-deploy
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c
+        with:
+          oauth-client-id: ${{ secrets.TS_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:policylab-ci
+          ping: 100.92.60.55
+      - name: Check TCP22 and the forced command (no deployment)
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/policylab-key"
+          hosts="$RUNNER_TEMP/policylab-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$hosts"
+          timeout 10 bash -c 'exec 3<>/dev/tcp/100.92.60.55/22'
+          echo "TCP22 reachable"
+          # An arbitrary command must be REJECTED by the forced command. A rejection proves
+          # key auth and strict host-key checking worked. Best-effort: adjust the grep below
+          # if the helper's rejection text matches one of these failure patterns.
+          set +e
+          out=$(ssh -F /dev/null -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" \
+            -o ConnectTimeout=20 deploy@100.92.60.55 "id" 2>&1)
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          if grep -Eqi 'permission denied|host key verification failed|connection (refused|timed out)|no route to host' <<<"$out"; then
+            echo "::error::SSH did not reach the forced command"; exit 1
+          fi
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::An arbitrary command was accepted; forced command is not enforced"; exit 1
+          fi
+          echo "OK: authenticated, host key verified, arbitrary command rejected"
+
   deploy:
     needs: publish
-    if: vars.ENABLE_POLICYLAB_DEPLOYMENT == 'true' && github.ref == 'refs/heads/main'
+    # CHANGED: main as before; the test branch only while POLICYLAB_BRANCH_DEPLOY is true.
+    if: >-
+      (vars.ENABLE_POLICYLAB_DEPLOYMENT == 'true' && github.ref == 'refs/heads/main') ||
+      (vars.POLICYLAB_BRANCH_DEPLOY == 'true' && github.ref == 'refs/heads/deploy/policylab-ci')
     environment: policylab-production
+    # CHANGED: serialize all releases to the one target; never cancel one that is running.
+    concurrency:
+      group: policylab-production-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -86,8 +167,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-          if [ "$current" = "$GITHUB_SHA" ]; then echo 'deploy=true' >> "$GITHUB_OUTPUT"; fi
+          # CHANGED: look up the head of the branch that triggered this run, not always main.
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
+          if [ "$current" = "$GITHUB_SHA" ]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping: $GITHUB_SHA is no longer the head of $GITHUB_REF_NAME ($current)"
+          fi
       - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c
         if: steps.current.outputs.deploy == 'true'
         with:
