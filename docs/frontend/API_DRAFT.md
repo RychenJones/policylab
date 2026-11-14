@@ -65,7 +65,12 @@ Scenario summary: `modeCounts: { gas, ev, transit }` (integer counts summing to 
 
 Changes: `householdsSwitched` (counts both directions), `householdsSwitchedPercent` (0–100), `avgAnnualCostChangeUsd`, `emissionsChangeTonnesCo2PerYear`, and `emissionsChangePercent`. Signed differences are proposed minus baseline. Relative emissions percentage is 100 × difference / baseline total, guarded for a zero denominator by the model service.
 
-Income summary: `incomeBand` (`low`, `middle`, or `high`), `householdCount`, `baselineModeCounts`, `policyModeCounts`, and `avgAnnualCostChangeUsd`. Nonempty bands are ordered low, middle, high. Mode wire values are `gas`, `ev`, `transit`; transit means car-free public transit under the plan, not the current aggregate model's combined non-driving share.
+- `appliedPolicy`: the three request values.
+- `simulatedYears`: `Cfg.SimulatedYears`, currently 5; not a request parameter.
+- `baseline`: `Simulate(0, 0, Cfg.BaseFare)`.
+- `policy`: `Simulate(gasTax, evRebate, transitFare)`.
+- `changePercentagePoints`: policy minus baseline, matching `PolicyEffect`.
+- `warnings`: structured extrapolation warnings; empty array when none apply.
 
 Rounding belongs to the backend DTO mapping: USD 2 decimals; total tonnes 1; per-household tonnes 2; percentages 1. Use AwayFromZero and normalize negative zero. Never round inside the underlying model. Empty-group means and zero denominators return zero. No NaN or infinity may reach the wire.
 

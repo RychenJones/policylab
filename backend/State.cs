@@ -1,3 +1,3 @@
 namespace TransportPolicy;
 
-public sealed record State(Mode Mode, double EvShare);
+public sealed record State(Mode Mode);
