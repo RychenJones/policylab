@@ -1,3 +1,4 @@
 namespace TransportPolicy;
 
-public sealed record Mode(double Drive, double Transit, double Other);
+// Mutually exclusive transportation outcomes.
+public sealed record Mode(double Gas, double Ev, double NoCar);
