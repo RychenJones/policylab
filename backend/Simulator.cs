@@ -142,6 +142,7 @@ public static class Simulator
     private static YearSnapshot WeightedSnapshot(IReadOnlyList<CohortConfig> configs,
         IReadOnlyList<CohortResult> results, int year)
     {
+        // Combines cohort snapshots using each cohort's population share.
         double gas = 0, ev = 0, noCar = 0;
         for (int i = 0; i < configs.Count; i++)
         {
