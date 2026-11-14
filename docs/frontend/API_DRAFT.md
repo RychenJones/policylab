@@ -1,6 +1,6 @@
 # API Rules and Endpoints Draft
 
-Status: provisional. Refine when the remaining design documentation arrives.
+Status: proposed API contract aligned with the current `TransportPolicy` simulator. Endpoints and wrapper DTOs below are not implemented. Backend model references: [Simulator.cs](../../backend/Simulator.cs), [Config.cs](../../backend/Config.cs), and [Result.cs](../../backend/Result.cs).
 
 Frontend language: plain JavaScript. React remains optional. TypeScript in companion drafts is contract notation only.
 
@@ -24,54 +24,66 @@ See [API Functions and Failure Handling Draft](API_FUNCTIONS_DRAFT.md) for match
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/health` | Basic application health; no configuration or secret details. |
-| GET | `/api/simulation/config` | Input defaults, supported ranges, units, household count, and model assumptions/version. |
+| GET | `/api/simulation/config` | Baseline policy defaults, input constraints, warning threshold, fixed horizon, and assumptions. |
 | QUERY | `/api/simulation` | Compute a scenario and return aggregate results without saving a scenario or creating a persistent job. |
 
 ### Simulation request
 
-Proposed fields; numeric defaults and allowed ranges remain undecided.
+All three fields are required finite JSON numbers. Use C# `double` to match the simulator. Proposed API names map to existing positional arguments:
 
-| Field | Meaning |
-| --- | --- |
-| `gasTaxUsdPerGallon` | Gas tax; whether this is a total or increase remains undecided. |
-| `evRebateUsd` | EV rebate amount. |
-| `publicTransitFareUsdPerRide` | Public transportation fare per ride. |
-| `seed` | Integer seed controlling population generation and any randomized simulation decisions. |
+| Field | Simulator argument | Meaning and constraint | Baseline default |
+| --- | --- | --- | --- |
+| `gasTaxUsdPerGallon` | `gasTax` | Adjustment added to base gas price; must keep that price positive. Currently strictly greater than -3.10. | 0 |
+| `evRebateUsd` | `evRebate` | EV rebate amount, at least 0. | 0 |
+| `publicTransitFareUsdPerRide` | `transitFare` | Total transit fare per ride, at least 0. | 1.75 |
 
-Use 5,000 households for the MVP. Reuse the same population and baseline when comparing policies. A seed makes comparisons reproducible within the same model version; it does not guarantee identical results across model changes.
+Read defaults from configuration rather than hard-coding them in the UI. The lower gas-tax bound is `-Cfg.BaseGasPrice` and is exclusive. Negative gas-tax adjustments are permitted. The simulator defines no finite upper bound for these inputs; do not invent calibrated maxima. All inputs and returned numbers must remain finite.
+
+`abs(gasTax) > 5.0` triggers an extrapolation warning, not rejection. Exactly 5.0 does not trigger it. The negative side of this warning range is currently unreachable because gas-price validation rejects values at or below -3.10.
 
 ### Simulation response
 
-Expected content, with exact field names pending agreement:
+Proposed wrapper fields supported by the current model:
 
-- Applied policy inputs, seed, household count, and model version.
-- Baseline and proposed-policy transportation behavior counts.
-- Average annual household cost change in USD.
-- Estimated emissions change, with unit and time period stated explicitly.
-- Results grouped by income level.
-- Assumptions identifying the results as exploratory estimates.
+- `appliedPolicy`: the three request values.
+- `horizonYears`: `Cfg.HorizonYears`, currently 5; not a request parameter.
+- `baseline`: `Simulate(0, 0, Cfg.BaseFare)`.
+- `policy`: `Simulate(gasTax, evRebate, transitFare)`.
+- `changePercentagePoints`: policy minus baseline, matching `PolicyEffect`.
+- `warnings`: structured extrapolation warnings; empty array when none apply.
 
-An empty result is a successful response, not a missing-resource error. Unexpected computation failures return a standard error response.
+Each result has `gasPct`, `evPct`, and `otherPct`. Baseline and policy values are percentages on a 0–100 scale and should total approximately 100 within floating-point tolerance. Changes are signed percentage points and should total approximately zero. Preserve numerical precision in the API and round only for display.
+
+The baseline is the final no-policy result over the same horizon, not the initial fleet composition. `otherPct` combines transit and other non-driving travel; do not label it as transit alone. Zero change is a successful result. A simulation response must contain all three result objects; it has no empty-result form.
+
+## Current model limitations
+
+- Deterministic aggregate model; no random seed, individual households, household count, or income groups.
+- Returns end-of-horizon shares, not household switching counts or a yearly time series.
+- Transit is modeled internally but is not separately returned by `Simulate`.
+- No returned household cost changes or emissions estimates. Internal running-cost calculations do not establish these outputs.
+- Constants in `Config` include placeholder assumptions. Results are exploratory estimates, not predictions.
+- No model-version identifier, persistence, or background jobs currently exist.
+- Current simulation has no cancellation-token support. Browser cancellation stops waiting; it cannot guarantee computation stops.
+- Extreme finite inputs can overflow intermediate arithmetic. The proposed API must reject non-finite/out-of-range result objects as an internal numerical failure (500), rather than emit invalid JSON or fabricate results. Practical input caps remain a future model-owner decision.
 
 ## Possible later endpoints
 
-Add only if the design requires saved scenarios or household drill-down.
+Future proposals only; no persistence behavior is provided by the simulator.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/scenarios` | Save a named scenario using an agreed persistence contract. |
 | GET | `/api/scenarios/{id}` | Retrieve a saved scenario. |
 | GET | `/api/scenarios` | List saved scenarios with bounded pagination. |
-| QUERY | `/api/scenarios/{id}/households/search` | Filter and paginate household results associated with a saved scenario. |
 
 Keep side-by-side comparison in the frontend initially, using two simulation responses. If simulation execution later requires a persistent background job, define a POST-based job workflow instead of changing QUERY semantics.
 
 ## Decisions awaiting documentation
 
-- Whether gas tax is a total or an increase, and which baseline values apply.
-- Whether behavior categories overlap or each household receives one primary outcome.
-- Cost accounting, emissions units, income bands, and input limits.
-- Authentication, persistence, deployment, and acceptable simulation runtime.
-- Final request/response schemas and API tooling support for QUERY. If infrastructure requires a POST search/computation alternative, document it explicitly.
+- Whether the model owner will define practical upper input limits or extend the returned metrics.
+- Final API wrapper names, any future model-version identifier, and timeout durations.
+- Authentication or persistence requirements, if introduced.
+- API tooling support for QUERY. If infrastructure requires a POST computation alternative, document it explicitly.
 
 Reference for QUERY semantics: [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).

@@ -1,6 +1,6 @@
 # API Functions and Failure Handling Draft
 
-Status: proposed interfaces, not an implementation. Complements [API_DRAFT.md](API_DRAFT.md). Policy defaults, ranges, units, and result categories await team agreement.
+Status: proposed API interfaces aligned with the current simulator, not an implementation. Complements [API_DRAFT.md](API_DRAFT.md). The wrapper contracts below are proposed; current model functions are `Simulator.Simulate(double gasTax, double evRebate, double transitFare)` and `Simulator.PolicyEffect(double gasTax, double evRebate, double transitFare)`, both returning `Result(GasPct, EvPct, OtherPct)` synchronously.
 
 Frontend language decision: use plain JavaScript. React remains optional; it does not change the language choice. TypeScript declarations below are retained only as draft contract notation, not implementation requirements. Implement frontend functions in JavaScript, with optional JSDoc for documentation. C# examples assume, but do not mandate, the proposed backend language. The wire contracts and error/cancellation rules apply regardless of implementation language.
 
@@ -42,14 +42,15 @@ export interface HealthResponse { status: "ok" }
 export interface NumericInputRule {
   defaultValue: number;
   min: number;
-  max: number;
+  minExclusive: boolean;
+  max: number | null; // null: no finite upper bound defined by the model.
   unit: string;
 }
 
 export interface SimulationConfig {
-  modelVersion: string;
-  householdCount: number;
-  defaultSeed: number;
+  baseGasPriceUsdPerGallon: number;
+  horizonYears: number;
+  gasTaxWarningAbsThresholdUsdPerGallon: number;
   inputs: {
     gasTaxUsdPerGallon: NumericInputRule;
     evRebateUsd: NumericInputRule;
@@ -62,36 +63,33 @@ export interface SimulationRequest {
   gasTaxUsdPerGallon: number;
   evRebateUsd: number;
   publicTransitFareUsdPerRide: number;
-  seed: number; // Required signed 32-bit integer for C# compatibility.
 }
 
-export interface BehaviorCount {
-  category: string; // Stable machine-readable key, agreed with model owner.
-  count: number;
+export interface TravelShares {
+  gasPct: number;
+  evPct: number;
+  otherPct: number; // Transit plus other non-driving travel.
 }
 
-export interface IncomeGroupResult {
-  incomeGroup: string; // Bands and keys await agreement.
-  householdCount: number;
-  behaviors: BehaviorCount[];
-  averageAnnualCostChangeUsd: number;
+export interface PercentagePointChanges {
+  gasPct: number; // Same keys as Result; values are signed percentage points.
+  evPct: number;
+  otherPct: number;
 }
 
-export interface EmissionsChange {
-  value: number;
-  unit: string; // Exact unit and period must be agreed before implementation.
+export interface SimulationWarning {
+  code: "gas_tax_extrapolation";
+  field: "gasTaxUsdPerGallon";
+  message: string;
 }
 
 export interface SimulationResponse {
   appliedPolicy: SimulationRequest;
-  modelVersion: string;
-  householdCount: number;
-  baselineBehaviors: BehaviorCount[];
-  policyBehaviors: BehaviorCount[];
-  averageAnnualCostChangeUsd: number;
-  emissionsChange: EmissionsChange | null; // null means not calculated.
-  incomeGroups: IncomeGroupResult[];
-  assumptions: string[];
+  horizonYears: number;
+  baseline: TravelShares;
+  policy: TravelShares;
+  changePercentagePoints: PercentagePointChanges;
+  warnings: SimulationWarning[];
 }
 
 export interface SimulationApi {
@@ -106,53 +104,69 @@ Expected transport failures resolve to `ApiResult` failures rather than rejectin
 
 Success values are unwrapped endpoint bodies, without an additional server-side `ok` envelope. `ApiResult` exists only in the frontend client.
 
+## Model mapping and limits
+
+| Request field | Existing simulator argument | Backend validation | No-policy default |
+| --- | --- | --- | --- |
+| `gasTaxUsdPerGallon` | `gasTax` | Finite; `Cfg.BaseGasPrice + value > 0`. Negative adjustments allowed. | 0 |
+| `evRebateUsd` | `evRebate` | Finite and nonnegative. | 0 |
+| `publicTransitFareUsdPerRide` | `transitFare` | Finite and nonnegative; total fare, not a change. | `Cfg.BaseFare`, currently 1.75 |
+
+Configuration rules: gas-tax `min = -Cfg.BaseGasPrice` (currently -3.10), `minExclusive = true`; rebate and fare minima are 0 with `minExclusive = false`. All maxima are null because the model sets no finite upper bounds. Base gas price is currently 3.10, horizon is 5 years, and warning threshold is 5.0. Read these from the model configuration; they are not client-supplied overrides. UI steps and practical caps are not yet model requirements.
+
+`baseline` is `Simulate(0, 0, Cfg.BaseFare)` and `policy` is the requested simulation. Subtract policy minus baseline once to obtain `changePercentagePoints`, equivalent to `PolicyEffect`; avoid recomputing both simulations merely to obtain the difference. This is a same-horizon comparison, not a comparison to the initial state. The baseline may evolve despite no policy change.
+
+Absolute results contain three mutually exclusive aggregate shares totaling approximately 100; changes total approximately zero. Validate finite values and ranges using a documented floating-point tolerance; do not clamp or round intermediate results to hide invalid output. Format percentages and percentage-point changes distinctly in the UI.
+
+The proposed wrapper adds structured `warnings` when `Math.Abs(gasTax) > Simulator.CalibratedGasTaxWarningThreshold`. The existing model only writes this warning to stderr. Extrapolation is still a 200 response, never a validation failure solely for exceeding the warning threshold. Exactly ±5 does not trigger the warning, though the negative value already fails current gas-price validation.
+
+No seed, household count, income breakdowns, cost-change metric, emissions metric, model version, or annual result series is returned by the current model. Do not fabricate these fields or convert aggregate percentages into observed household switches. `otherPct` includes both transit and other non-driving modes. Computation is deterministic for fixed inputs and configuration; Config values include placeholder assumptions. Explain these limits through config `assumptions`.
+
+If extreme but finite inputs cause non-finite or otherwise invalid results, the proposed adapter returns 500 with `code: "simulation_numerical_failure"` and a safe message. Log details server-side. The current model does not provide practical upper bounds or a distinct unsupported-scenario rejection.
+
 ## Backend contracts
 
-Proposed C# records mirror the JSON above. Configure camelCase serialization; use decimal for policy money inputs. All request fields are required, including the seed. Validate numeric bounds, unknown request properties, and the configured model's constraints before computation.
+Proposed C# records mirror the JSON above. Configure camelCase serialization and use `double` to match the simulation inputs and outputs; these values describe a numerical model, not financial transactions. All three input fields are required. Proposed API-boundary rules reject unknown properties, missing fields, invalid JSON types, and the model validation failures above with 400. These boundary rules are not currently supplied by `Simulator` itself.
 
 ```csharp
 using Microsoft.AspNetCore.Mvc;
 
 public sealed record HealthResponse(string Status);
 public sealed record NumericInputRule(
-    decimal DefaultValue, decimal Min, decimal Max, string Unit);
+    double DefaultValue, double Min, bool MinExclusive,
+    double? Max, string Unit);
 public sealed record PolicyInputRules(
     NumericInputRule GasTaxUsdPerGallon,
     NumericInputRule EvRebateUsd,
     NumericInputRule PublicTransitFareUsdPerRide);
 public sealed record SimulationConfig(
-    string ModelVersion, int HouseholdCount, int DefaultSeed,
+    double BaseGasPriceUsdPerGallon, int HorizonYears,
+    double GasTaxWarningAbsThresholdUsdPerGallon,
     PolicyInputRules Inputs, IReadOnlyList<string> Assumptions);
 
 public sealed record SimulationRequest
 {
-    public required decimal GasTaxUsdPerGallon { get; init; }
-    public required decimal EvRebateUsd { get; init; }
-    public required decimal PublicTransitFareUsdPerRide { get; init; }
-    public required int Seed { get; init; }
+    public required double GasTaxUsdPerGallon { get; init; }
+    public required double EvRebateUsd { get; init; }
+    public required double PublicTransitFareUsdPerRide { get; init; }
 }
 
-public sealed record BehaviorCount(string Category, int Count);
-public sealed record IncomeGroupResult(
-    string IncomeGroup, int HouseholdCount,
-    IReadOnlyList<BehaviorCount> Behaviors,
-    decimal AverageAnnualCostChangeUsd);
-public sealed record EmissionsChange(double Value, string Unit);
+public sealed record TravelShares(double GasPct, double EvPct, double OtherPct);
+public sealed record PercentagePointChanges(
+    double GasPct, double EvPct, double OtherPct);
+public sealed record SimulationWarning(string Code, string Field, string Message);
 public sealed record SimulationResponse(
-    SimulationRequest AppliedPolicy, string ModelVersion, int HouseholdCount,
-    IReadOnlyList<BehaviorCount> BaselineBehaviors,
-    IReadOnlyList<BehaviorCount> PolicyBehaviors,
-    decimal AverageAnnualCostChangeUsd,
-    EmissionsChange? EmissionsChange,
-    IReadOnlyList<IncomeGroupResult> IncomeGroups,
-    IReadOnlyList<string> Assumptions);
+    SimulationRequest AppliedPolicy, int HorizonYears,
+    TravelShares Baseline, TravelShares Policy,
+    PercentagePointChanges ChangePercentagePoints,
+    IReadOnlyList<SimulationWarning> Warnings);
 
 // Proposed endpoint signatures; routing and implementations come later.
 public interface ISimulationEndpoints
 {
     ActionResult<HealthResponse> GetHealth();
     ActionResult<SimulationConfig> GetConfig();
-    Task<ActionResult<SimulationResponse>> RunSimulationAsync(
+    ActionResult<SimulationResponse> RunSimulation(
         SimulationRequest request, CancellationToken cancellationToken);
 }
 
@@ -160,12 +174,14 @@ public interface ISimulationEndpoints
 public interface ISimulationService
 {
     SimulationConfig GetConfig();
-    Task<SimulationResponse> RunAsync(
+    SimulationResponse Run(
         SimulationRequest request, CancellationToken cancellationToken);
 }
 ```
 
-The endpoint token comes from the HTTP request. Pass it into services, database operations, and external HTTP calls. CPU-bound household loops must periodically check it. A Task return type alone does not make computation asynchronous or cancellable; do not add Task.Run by default.
+The proposed adapter token comes from the HTTP request; check it before and between baseline/policy calls and before returning. Current `Simulator.Simulate` accepts no token and cannot be interrupted during a call. These synchronous signatures reflect the current CPU-only model; do not add Task.Run or claim cooperative in-loop cancellation. If the model later accepts a token, propagate it and add cancellation checks within its year loop.
+
+Map the known policy validation failures at the API boundary to camelCase request fields and 400. If model argument exceptions are mapped defensively, restrict mapping to known input errors from the simulator; do not turn every ArgumentException into a client error.
 
 Use ASP.NET Core `ProblemDetails` / `ValidationProblemDetails` for failures, with `code` and `traceId` extensions. Centralize exception mapping and framework-generated error formatting, including model binding, unsupported media types, and unmatched routes. Do not return exception messages or stack traces to the browser.
 
@@ -175,7 +191,7 @@ Use ASP.NET Core `ProblemDetails` / `ValidationProblemDetails` for failures, wit
 | --- | --- | --- | --- |
 | `getHealth` / `GetHealth` | GET `/api/health` | 200, `HealthResponse` | Infrastructure failures; liveness does not imply database readiness. |
 | `getSimulationConfig` / `GetConfig` | GET `/api/simulation/config` | 200, `SimulationConfig` | 500, 503. |
-| `runSimulation` / `RunSimulationAsync` | QUERY `/api/simulation` | 200, `SimulationResponse` | 400, 413, 415, 422, 429, 500, 503, 504. |
+| `runSimulation` / `RunSimulation` | QUERY `/api/simulation` | 200, `SimulationResponse`, possibly with warnings | 400/415 at the boundary; 500 for unexpected/numerical failure. Infrastructure may also return 413, 429, 503, 504. |
 
 Any endpoint can encounter infrastructure rejection or unexpected HTTP responses. The client must accept arbitrary non-2xx status codes as HTTP failures, including codes not listed here.
 
@@ -193,9 +209,9 @@ Any endpoint can encounter infrastructure rejection or unexpected HTTP responses
 | 409 | `conflict` | Future write conflicts with existing state. Ask user to reconcile; do not repeat blindly. |
 | 413 | `payload_too_large` | Request exceeds configured body limit. Show a size-limit message. |
 | 415 | `unsupported_media_type` | Missing/unsupported body content type under this API's JSON policy. |
-| 422 | `unsupported_scenario` | Input passes field validation but represents a combination the model cannot evaluate. Explain the constraint. |
+| 422 | `unsupported_scenario` | Reserved for a future explicit model constraint. The current model has no such rejection; extrapolation warnings remain successful responses. |
 | 429 | `rate_limited` | Too many requests; respect `Retry-After` when supplied. |
-| 500 | `internal_error` | Unexpected failure. Display a generic message and trace ID if available. |
+| 500 | `internal_error` or `simulation_numerical_failure` | Unexpected failure or invalid numerical output. Display a safe message and trace ID if available. |
 | 501 | `method_not_implemented` | An intermediary/server does not implement QUERY; check deployment support. |
 | 502 | `upstream_failure` | Gateway or required dependency returned an invalid response. |
 | 503 | `service_unavailable` | Temporary overload, unavailable dependency, or shutdown; respect `Retry-After`. |
@@ -214,7 +230,7 @@ Example 400 body:
   "status": 400,
   "code": "validation_failed",
   "errors": {
-    "seed": ["Seed is required and must be a signed 32-bit integer."]
+    "gasTaxUsdPerGallon": ["Gas tax adjustment must keep the resulting gas price positive."]
   },
   "traceId": "server-generated-correlation-id"
 }
@@ -225,11 +241,11 @@ Example 400 body:
 | Event | Frontend outcome | Backend behavior |
 | --- | --- | --- |
 | Signal already aborted | `cancelled`; do not send | No request expected. |
-| User cancels or component unmounts | `cancelled`; no error toast | Observe request cancellation and stop work cooperatively. |
-| A newer scenario supersedes an older request | Cancel old request; only newest request may update the UI | Stop old work when cancellation reaches the server. |
+| User cancels or component unmounts | `cancelled`; no error toast | Adapter can stop between model calls; an active model call continues. |
+| A newer scenario supersedes an older request | Cancel old request; only newest request may update the UI | Same cancellation limit; no guarantee that old computation stops immediately. |
 | Local deadline expires | `timeout`; preserve inputs and allow retry | May observe disconnection; stopping is not guaranteed to be immediate. |
-| Server deadline expires | HTTP 504 if response can still be written | Cancel simulation using a separately tracked deadline token. |
-| Connection disappears | `network` unless a known local abort caused it | Stop if request token is signaled; a response may be impossible. |
+| Server deadline expires, if configured | HTTP 504 if response can still be written | Track the deadline separately; current model cannot be interrupted mid-call or guarantee prompt timeout completion. |
+| Connection disappears | `network` unless a known local abort caused it | Adapter observes signaled token between calls; a response may be impossible. |
 
 Combine caller cancellation and a local deadline without losing the cause. Record the first observed terminal outcome; do not relabel an already received HTTP failure because a timer fires later. Apply the deadline through response-body consumption, then clear timers and remove listeners on every completion path.
 
@@ -286,11 +302,11 @@ export interface SavedScenarioApi {
 
 Backend counterparts: `SaveScenarioAsync(SaveScenarioRequest, CancellationToken)`, `GetScenarioAsync(string id, CancellationToken)`, and `ListScenariosAsync(int page, int pageSize, CancellationToken)`, returning `Task<ActionResult<...>>` with matching DTOs. Use POST `/api/scenarios` (201), GET `/api/scenarios/{id}` (200/404), and GET `/api/scenarios` (200). Validate names and enforce any ownership rules on the server. Pagination defaults: page 1, size 20, maximum 100; reject invalid values with 400 and use stable ordering.
 
-Household search remains deferred until a household response schema exists. No update/delete/job endpoints are needed for the current MVP.
+Saved-scenario contracts above remain future proposals, not outputs supported by the simulator. Household search is outside the current aggregate model. No update/delete/job endpoints are needed for the current MVP.
 
 ## Verification when implementation starts
 
-Check matching wire formats, required fields and validation paths; HTTP errors with JSON/HTML/empty bodies; malformed success bodies; cancellation before send and during body reads; local and server deadlines; stale request races; and QUERY through the deployed browser/proxy path. Confirm that server computation checks cancellation and that unexpected exceptions return safe problems.
+Check matching wire formats and three required numeric fields; negative gas adjustments on either side of the exclusive gas-price bound; zero fare/rebate; extrapolation warning above 5 but not at 5; finite result shares and percentage-point differences; HTTP errors with JSON/HTML/empty bodies; malformed success bodies; cancellation before send and during body reads; stale request races; and QUERY through the deployed browser/proxy path. Verify adapter cancellation between calls without claiming mid-call interruption. Check safe failures for numerical overflow and unexpected exceptions. Timeout durations remain an API policy decision, not a model capability.
 
 ## References
 
