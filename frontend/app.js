@@ -1,230 +1,157 @@
-const EXAMPLE_POLICY = {
-  gasTaxUsdPerGallon: 1,
-  evRebateUsd: 7500,
-  publicTransitFareUsdPerRide: 2.5,
-  seed: 2026
+const HOUSEHOLD_COUNT = 5000;
+
+const EXAMPLE_VALUES = {
+  baseGasPct: 88.592,
+  baseEvPct: 1.808,
+  baseNoCarPct: 10,
+  gasTax: 1,
+  evRebate: 7500,
+  transitFare: 1.75
 };
 
-const form = document.querySelector('#policy-form');
-const submitButton = form.querySelector('button[type="submit"]');
+const form = document.querySelector('#simulation-form');
+const runButton = document.querySelector('#run-button');
 const errorMessage = document.querySelector('#form-error');
 const resultStatus = document.querySelector('#result-status');
-const assumptionsDialog = document.querySelector('#assumptions-dialog');
+const numberFormatter = new Intl.NumberFormat('en-US');
 
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const number = new Intl.NumberFormat('en-US');
+const chart = new Chart(document.querySelector('#behavior-chart'), {
+  type: 'bar',
+  data: {
+    labels: ['Gas vehicle', 'EV', 'No car'],
+    datasets: [
+      { label: 'Starting population', data: [0, 0, 0], backgroundColor: '#9bb9d1', borderRadius: 6, maxBarThickness: 46 },
+      { label: 'Policy result', data: [0, 0, 0], backgroundColor: '#2b7967', borderRadius: 6, maxBarThickness: 46 }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: { y: { beginAtZero: true, max: 100, ticks: { callback: (value) => `${value}%` }, grid: { color: '#e7ece8' } }, x: { grid: { display: false } } },
+    plugins: {
+      legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, padding: 20 } },
+      tooltip: { callbacks: { label(context) { const percent = context.raw; return `${context.dataset.label}: ${percent.toFixed(3)}% (${numberFormatter.format(Math.round(percent / 100 * HOUSEHOLD_COUNT))} households)`; } } }
+    }
+  }
+});
 
-function readPolicyForm() {
+function readValues() {
   return {
-    gasTaxUsdPerGallon: Number(document.querySelector('#gas-tax').value),
-    evRebateUsd: Number(document.querySelector('#ev-rebate').value),
-    publicTransitFareUsdPerRide: Number(document.querySelector('#transit-fare').value),
-    seed: Number(document.querySelector('#seed').value)
+    baseGasPct: Number(document.querySelector('#base-gas').value),
+    baseEvPct: Number(document.querySelector('#base-ev').value),
+    baseNoCarPct: Number(document.querySelector('#base-no-car').value),
+    gasTax: Number(document.querySelector('#gas-tax').value),
+    evRebate: Number(document.querySelector('#ev-rebate').value),
+    transitFare: Number(document.querySelector('#transit-fare').value)
   };
 }
 
-function validatePolicy(policy) {
-  const fields = [
-    ['gasTaxUsdPerGallon', 'Gas tax', 0, 10],
-    ['evRebateUsd', 'EV rebate', 0, 20000],
-    ['publicTransitFareUsdPerRide', 'Public transit fare', 0, 15],
-    ['seed', 'Scenario seed', -2147483648, 2147483647]
-  ];
-
-  for (const [key, label, min, max] of fields) {
-    if (!Number.isFinite(policy[key]) || policy[key] < min || policy[key] > max) {
-      return `${label} must be between ${number.format(min)} and ${number.format(max)}.`;
-    }
-  }
-
-  if (!Number.isInteger(policy.seed)) return 'Scenario seed must be a whole number.';
+function validateValues(values) {
+  const baselineTotal = values.baseGasPct + values.baseEvPct + values.baseNoCarPct;
+  if (![values.baseGasPct, values.baseEvPct, values.baseNoCarPct].every(Number.isFinite)) return 'Enter all three starting percentages.';
+  if (Math.abs(baselineTotal - 100) > 0.001) return `Starting percentages must total 100%. Current total: ${baselineTotal.toFixed(3)}%.`;
+  if (values.gasTax < 0 || values.gasTax > 10 || !Number.isFinite(values.gasTax)) return 'Gas tax must be between $0 and $10 per gallon.';
+  if (values.evRebate < 0 || values.evRebate > 20000 || !Number.isFinite(values.evRebate)) return 'EV rebate must be between $0 and $20,000.';
+  if (values.transitFare < 0 || values.transitFare > 15 || !Number.isFinite(values.transitFare)) return 'Transit fare must be between $0 and $15 per ride.';
   return '';
 }
 
-// Integration seam: replace this mock with the API client's runSimulation call.
-// The expected request shape is documented in docs/frontend/API_FUNCTIONS_DRAFT.md.
-async function runSimulation(policy) {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
-  const households = 5000;
-  const taxPressure = policy.gasTaxUsdPerGallon / 10;
-  const rebateEffect = policy.evRebateUsd / 20000;
-  const noCarEffect = 1 - policy.publicTransitFareUsdPerRide / 15;
-  const evShare = Math.min(.58, .08 + rebateEffect * .34 + taxPressure * .16);
-  const noCarShare = Math.min(.42, .07 + noCarEffect * .2 + taxPressure * .11);
-  const evHouseholds = Math.round(households * evShare);
-  const noCarHouseholds = Math.round(households * noCarShare);
-  const gasHouseholds = households - evHouseholds - noCarHouseholds;
-  const costChange = Math.round(policy.gasTaxUsdPerGallon * 180 - policy.evRebateUsd * .02 + policy.publicTransitFareUsdPerRide * 16);
-  const emissionsChange = -Math.round(evHouseholds * 110 + noCarHouseholds * 105);
-
+function buildBackendRequest(values) {
   return {
-    appliedPolicy: policy,
-    modelVersion: '0.1-demo',
-    householdCount: households,
-    baselineBehaviors: [
-      { category: 'gas', count: households },
-      { category: 'ev', count: 0 },
-      { category: 'noCar', count: 0 }
-    ],
-    policyBehaviors: [
-      { category: 'gas', count: gasHouseholds },
-      { category: 'ev', count: evHouseholds },
-      { category: 'noCar', count: noCarHouseholds }
-    ],
-    averageAnnualCostChangeUsd: costChange,
-    emissionsChange: { value: emissionsChange, unit: 'kg CO2e / year' },
-    incomeGroups: [
-      { incomeGroup: 'Under $40k', averageAnnualCostChangeUsd: Math.round(costChange * 1.45) },
-      { incomeGroup: '$40–80k', averageAnnualCostChangeUsd: Math.round(costChange * 1.05) },
-      { incomeGroup: '$80–120k', averageAnnualCostChangeUsd: Math.round(costChange * .78) },
-      { incomeGroup: 'Over $120k', averageAnnualCostChangeUsd: Math.round(costChange * .5) }
-    ],
-    assumptions: []
+    baseGasShare: values.baseGasPct * 0.01,
+    baseEvShare: values.baseEvPct * 0.01,
+    baseNoCarShare: values.baseNoCarPct * 0.01,
+    gasTax: values.gasTax,
+    evRebate: values.evRebate,
+    transitFare: values.transitFare
   };
 }
 
-function getBehaviorCounts(result, key) {
-  return Object.fromEntries(result[key].map((item) => [item.category, item.count]));
+// Temporary preview adapter. Replace only this function with the API call.
+// It receives fractions for baseline shares because that is the backend format.
+async function requestSimulation(request) {
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  const taxEffect = request.gasTax * 2.2;
+  const rebateEffect = request.evRebate / 20000 * 13;
+  const fareEffect = (1 - request.transitFare / 15) * 2;
+  const evPct = Math.min(75, request.baseEvShare * 100 + taxEffect + rebateEffect);
+  const noCarPct = Math.min(45, request.baseNoCarShare * 100 + fareEffect + request.gasTax * 0.5);
+  return { gasPct: 100 - evPct - noCarPct, evPct, noCarPct };
 }
 
-function formatSignedMoney(value) {
-  return `${value >= 0 ? '+' : '−'}${money.format(Math.abs(value))}`;
+function setTotalStatus(values) {
+  const total = values.baseGasPct + values.baseEvPct + values.baseNoCarPct;
+  const status = document.querySelector('#baseline-total');
+  status.textContent = `Total: ${total.toFixed(3)}%`;
+  status.classList.toggle('invalid', Math.abs(total - 100) > 0.001);
 }
 
-function formatSignedNumber(value) {
-  return `${value >= 0 ? '+' : '−'}${number.format(Math.abs(value))}`;
+function signedPoints(value) { return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)} pp`; }
+function signedHouseholds(value) { return `${value >= 0 ? '+' : '−'}${numberFormatter.format(Math.abs(Math.round(value / 100 * HOUSEHOLD_COUNT)))} households`; }
+
+function renderResults(values, result) {
+  const baseline = [values.baseGasPct, values.baseEvPct, values.baseNoCarPct];
+  const policy = [result.gasPct, result.evPct, result.noCarPct];
+  const labels = ['Gas vehicle', 'EV', 'No car'];
+  const changes = policy.map((value, index) => value - baseline[index]);
+  const largestIndex = changes.reduce((best, value, index) => Math.abs(value) > Math.abs(changes[best]) ? index : best, 0);
+  const largest = changes[largestIndex];
+  const direction = largest < 0 ? 'decreased' : 'increased';
+
+  chart.data.datasets[0].data = baseline;
+  chart.data.datasets[1].data = policy;
+  chart.update();
+  document.querySelector('#headline-title').textContent = `${labels[largestIndex]} use ${direction}`;
+  document.querySelector('#headline-detail').textContent = `${signedPoints(largest)} · ${signedHouseholds(largest)} compared with the starting population.`;
+  document.querySelector('#gas-change').textContent = signedPoints(changes[0]);
+  document.querySelector('#ev-change').textContent = signedPoints(changes[1]);
+  document.querySelector('#no-car-change').textContent = signedPoints(changes[2]);
+  document.querySelector('#gas-count').textContent = signedHouseholds(changes[0]);
+  document.querySelector('#ev-count').textContent = signedHouseholds(changes[1]);
+  document.querySelector('#no-car-count').textContent = signedHouseholds(changes[2]);
+  resultStatus.textContent = 'Preview result · API not connected';
 }
 
-function renderBehaviorChart(result) {
-  const labels = { gas: 'Gas vehicle', ev: 'EV', noCar: 'No car' };
-  const baseline = getBehaviorCounts(result, 'baselineBehaviors');
-  const policy = getBehaviorCounts(result, 'policyBehaviors');
-  const max = Math.max(...Object.values(baseline), ...Object.values(policy), 1);
-  const chart = document.querySelector('#behavior-chart');
-
-  chart.innerHTML = Object.keys(labels).map((key) => `
-    <div class="bar-column">
-      <div class="bar-group">
-        <div>
-          <div class="bar-value">${number.format(baseline[key])}</div>
-          <div class="bar baseline" style="height: ${Math.max(3, baseline[key] / max * 165)}px" title="Baseline: ${number.format(baseline[key])}"></div>
-        </div>
-        <div>
-          <div class="bar-value">${number.format(policy[key])}</div>
-          <div class="bar policy" style="height: ${Math.max(3, policy[key] / max * 165)}px" title="Policy: ${number.format(policy[key])}"></div>
-        </div>
-      </div>
-      <div class="bar-label">${labels[key]}</div>
-    </div>
-  `).join('');
+function setFormValues(values) {
+  document.querySelector('#base-gas').value = values.baseGasPct;
+  document.querySelector('#base-ev').value = values.baseEvPct;
+  document.querySelector('#base-no-car').value = values.baseNoCarPct;
+  document.querySelector('#gas-tax').value = values.gasTax;
+  document.querySelector('#ev-rebate').value = values.evRebate;
+  document.querySelector('#transit-fare').value = values.transitFare;
+  setTotalStatus(values);
 }
 
-function renderIncomeChart(result) {
-  const max = Math.max(...result.incomeGroups.map((group) => Math.abs(group.averageAnnualCostChangeUsd)), 1);
-  document.querySelector('#income-chart').innerHTML = result.incomeGroups.map((group) => `
-    <div class="income-row">
-      <span class="income-label">${group.incomeGroup}</span>
-      <div class="income-track"><div class="income-fill" style="width: ${Math.max(3, Math.abs(group.averageAnnualCostChangeUsd) / max * 100)}%"></div></div>
-      <span class="income-value">${formatSignedMoney(group.averageAnnualCostChangeUsd)}</span>
-    </div>
-  `).join('');
-}
-
-function renderResults(result) {
-  const baseline = getBehaviorCounts(result, 'baselineBehaviors');
-  const policy = getBehaviorCounts(result, 'policyBehaviors');
-  const switched = result.householdCount - policy.gas;
-  const switchPercent = switched / result.householdCount * 100;
-
-  document.querySelector('#switching-value').textContent = number.format(switched);
-  document.querySelector('#switching-change').textContent = `${switchPercent.toFixed(1)}% of population`;
-  document.querySelector('#cost-value').textContent = formatSignedMoney(result.averageAnnualCostChangeUsd);
-  document.querySelector('#emissions-value').textContent = formatSignedNumber(result.emissionsChange.value);
-  document.querySelector('#emissions-unit').textContent = result.emissionsChange.unit.replace('CO2e', 'CO₂e');
-  resultStatus.textContent = `Simulation complete · Seed ${result.appliedPolicy.seed}`;
-  renderBehaviorChart({ ...result, baselineBehaviors: baselineToArray(baseline) });
-  renderIncomeChart(result);
-}
-
-function baselineToArray(counts) {
-  return Object.entries(counts).map(([category, count]) => ({ category, count }));
-}
-
-function setFormValues(policy) {
-  document.querySelector('#gas-tax').value = policy.gasTaxUsdPerGallon;
-  document.querySelector('#ev-rebate').value = policy.evRebateUsd;
-  document.querySelector('#transit-fare').value = policy.publicTransitFareUsdPerRide;
-  document.querySelector('#seed').value = policy.seed;
-  document.querySelectorAll('.range-input').forEach((range) => {
-    range.value = document.querySelector(`#${range.dataset.target}`).value;
-  });
-}
-
-document.querySelectorAll('.range-input').forEach((range) => {
-  range.addEventListener('input', () => {
-    document.querySelector(`#${range.dataset.target}`).value = range.value;
-  });
-});
-
-document.querySelectorAll('.input-with-unit input').forEach((input) => {
-  input.addEventListener('input', () => {
-    const range = document.querySelector(`[data-target="${input.id}"]`);
-    if (range) range.value = input.value;
-  });
-});
+['#base-gas', '#base-ev', '#base-no-car'].forEach((selector) => document.querySelector(selector).addEventListener('input', () => setTotalStatus(readValues())));
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const policy = readPolicyForm();
-  const validationError = validatePolicy(policy);
+  const values = readValues();
+  const validationError = validateValues(values);
   errorMessage.hidden = !validationError;
   errorMessage.textContent = validationError;
   if (validationError) return;
-
-  submitButton.disabled = true;
-  submitButton.querySelector('span').textContent = 'Running…';
-  resultStatus.textContent = 'Running simulation…';
+  runButton.disabled = true;
+  runButton.querySelector('span').textContent = 'Running…';
+  resultStatus.textContent = 'Running preview…';
   try {
-    const result = await runSimulation(policy);
-    renderResults(result);
-  } catch (error) {
+    const result = await requestSimulation(buildBackendRequest(values));
+    renderResults(values, result);
+  } catch {
     errorMessage.hidden = false;
     errorMessage.textContent = 'The simulation could not be completed. Please try again.';
     resultStatus.textContent = 'Simulation failed';
   } finally {
-    submitButton.disabled = false;
-    submitButton.querySelector('span').textContent = 'Run simulation';
+    runButton.disabled = false;
+    runButton.querySelector('span').textContent = 'Run simulation';
   }
 });
 
 document.querySelector('#reset-button').addEventListener('click', () => {
-  setFormValues(EXAMPLE_POLICY);
+  setFormValues(EXAMPLE_VALUES);
   errorMessage.hidden = true;
-  renderResults({ ...createExampleResult(), appliedPolicy: EXAMPLE_POLICY });
+  renderResults(EXAMPLE_VALUES, { gasPct: 72.4, evPct: 18.1, noCarPct: 9.5 });
 });
 
-function createExampleResult() {
-  return {
-    appliedPolicy: EXAMPLE_POLICY,
-    householdCount: 5000,
-    baselineBehaviors: [{ category: 'gas', count: 5000 }, { category: 'ev', count: 0 }, { category: 'noCar', count: 0 }],
-    policyBehaviors: [{ category: 'gas', count: 3650 }, { category: 'ev', count: 900 }, { category: 'noCar', count: 450 }],
-    averageAnnualCostChangeUsd: 215,
-    emissionsChange: { value: -125000, unit: 'kg CO2e / year' },
-    incomeGroups: [
-      { incomeGroup: 'Under $40k', averageAnnualCostChangeUsd: 312 },
-      { incomeGroup: '$40–80k', averageAnnualCostChangeUsd: 226 },
-      { incomeGroup: '$80–120k', averageAnnualCostChangeUsd: 168 },
-      { incomeGroup: 'Over $120k', averageAnnualCostChangeUsd: 108 }
-    ]
-  };
-}
-
-document.querySelector('#assumptions-button').addEventListener('click', () => assumptionsDialog.showModal());
-document.querySelector('#close-dialog').addEventListener('click', () => assumptionsDialog.close());
-assumptionsDialog.addEventListener('click', (event) => {
-  if (event.target === assumptionsDialog) assumptionsDialog.close();
-});
-
-renderResults(createExampleResult());
+setFormValues(EXAMPLE_VALUES);
+renderResults(EXAMPLE_VALUES, { gasPct: 72.4, evPct: 18.1, noCarPct: 9.5 });
