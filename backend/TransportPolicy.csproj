@@ -8,5 +8,7 @@
   <ItemGroup>
     <Content Include="../frontend/index.html;../frontend/app.js;../frontend/api.js;../frontend/styles.css"
              Link="wwwroot/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../frontend/js/*.js"
+             Link="wwwroot/js/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
