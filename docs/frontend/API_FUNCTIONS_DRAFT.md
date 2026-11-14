@@ -1,6 +1,6 @@
 # API Functions and Failure Handling Draft
 
-Minimum transport implementation and rebuild reference. [API_DRAFT.md](API_DRAFT.md) defines the full target wire contract. Plain JavaScript is selected. Backend and UI integration are pending; the client is independently testable and is not imported by the existing app yet.
+Minimum transport implementation and rebuild reference. [API_DRAFT.md](API_DRAFT.md) defines the full target wire contract. Plain JavaScript is selected. Backend and UI integration are pending; the client is independently testable and is not imported by the existing app yet. The current backend functions are `Simulator.Simulate(double gasTax, double evRebate, double transitFare)` and `Simulator.CalculatePolicyEffect(double gasTax, double evRebate, double transitFare)`, both returning `Result(GasPct, EvPct, NoCarPct)` synchronously.
 
 ## Exported interface
 
@@ -116,7 +116,7 @@ Success values are unwrapped endpoint bodies, without an additional server-side 
 
 Configuration rules: gas-tax `min = -Cfg.BaseGasPrice` (currently -3.10), `minExclusive = true`; rebate and fare minima are 0 with `minExclusive = false`. All maxima are null because the model sets no finite upper bounds. Base gas price is currently 3.10, horizon is 5 years, and warning threshold is 5.0. Read these from the model configuration; they are not client-supplied overrides. UI steps and practical caps are not yet model requirements.
 
-`baseline` is `Simulate(0, 0, Cfg.BaseFare)` and `policy` is the requested simulation. Subtract policy minus baseline once to obtain `changePercentagePoints`, equivalent to `PolicyEffect`; avoid recomputing both simulations merely to obtain the difference. This is a same-horizon comparison, not a comparison to the initial state. The baseline may evolve despite no policy change.
+`baseline` is `Simulate(0, 0, Cfg.BaseFare)` and `policy` is the requested simulation. Subtract policy minus baseline once to obtain `changePercentagePoints`, equivalent to `CalculatePolicyEffect`; avoid recomputing both simulations merely to obtain the difference. This is a same-horizon comparison, not a comparison to the initial state. The baseline may evolve despite no policy change.
 
 Absolute results contain three mutually exclusive aggregate shares totaling approximately 100; changes total approximately zero. Validate finite values and ranges using a documented floating-point tolerance; do not clamp or round intermediate results to hide invalid output. Format percentages and percentage-point changes distinctly in the UI.
 
@@ -153,9 +153,9 @@ public sealed record SimulationRequest
     public required double PublicTransitFareUsdPerRide { get; init; }
 }
 
-public sealed record TravelShares(double GasPct, double EvPct, double OtherPct);
+public sealed record TravelShares(double GasPct, double EvPct, double NoCarPct);
 public sealed record PercentagePointChanges(
-    double GasPct, double EvPct, double OtherPct);
+    double GasPct, double EvPct, double NoCarPct);
 public sealed record SimulationWarning(string Code, string Field, string Message);
 public sealed record SimulationResponse(
     SimulationRequest AppliedPolicy, int SimulatedYears,
