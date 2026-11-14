@@ -16,7 +16,12 @@ PolicySim lets a legislator set three transportation policy levers (gas tax chan
 
 ### Assumptions (decided here; change only by agreement of all four devs)
 - **A-1 Gas tax is a signed *change*** to today's pump price (`BASE_GAS_PRICE = $3.50/gal`, existing taxes included). The brief's "$1.00 per gallon" means +$1.00/gal. **Cuts are allowed** (decided 2026-11-14) down to **−$0.50/gal**, which is roughly the full combined federal + average state gas tax already in the $3.50 base, so the minimum models a full repeal (pump price $3.00). Going lower would be a fuel subsidy, which is out of scope.
-- **A-2 Each household gets exactly one primary mode** per scenario: `gas`, `ev`, `partialTransit` (keeps the gas car and shifts 40% of miles to transit), or `fullTransit` (car-free). Categories do not overlap, so counts always add up to 5,000.
+- **A-2 Each household gets exactly one mode** per scenario, out of **three**:
+  - `gas`: keeps a gas car.
+  - `ev`: switches to an EV.
+  - `transit`: goes car-free and uses public transit for all of its miles.
+
+  Categories do not overlap, so counts always add up to 5,000. Reduced driving and part-time transit are **out of scope** (decided 2026-11-14). The brief's "partially or fully" wording is a leftover and does not apply.
 - **A-3 Baseline ("before") = the same model run with the status-quo policy** (`+$0.00` tax, `$0` rebate, `$2.50` fare) on the same population. "After" = the model run with the user's policy. Because both runs use identical households and rules, the status-quo policy gives **zero change**. That property is tested (see §12).
 - **A-4 Fixed population.** 5,000 households are generated once at server startup with seed `42`. Every request reuses that population, which is what makes scenarios comparable. The request has no seed.
 - **A-5 The decision rule is deterministic.** Randomness exists only in household generation. The same policy always gives the same result.
@@ -39,7 +44,7 @@ PolicySim lets a legislator set three transportation policy levers (gas tax chan
 - [ ] FR-1: Generate (or load) 5,000 synthetic households deterministically.
 - [ ] FR-2: The user sets the gas tax change (increase or cut), EV rebate, and transit fare, with validation and sensible defaults.
 - [ ] FR-3: Run the simulation and get baseline vs. policy results in a single request.
-- [ ] FR-4: Show mode counts before and after (gas / EV / partial transit / full transit) and the number of households that switched.
+- [ ] FR-4: Show mode counts before and after (gas car / EV / public transit) and the number of households that switched.
 - [ ] FR-5: Show the average yearly household cost change in $ and %. *(The by-income-band breakdown is CUT-FIRST.)*
 - [ ] FR-6: Show the total yearly CO2 emissions change (tonnes and %) and per household.
 - [ ] FR-7: Compare scenarios: keep a history of runs in the session and show them side by side in a comparison table. This is how the plan meets brief success criterion #6.
@@ -50,11 +55,11 @@ PolicySim lets a legislator set three transportation policy levers (gas tax chan
 - [ ] FR-9: Show loading, error, and success states. Out-of-range input is rejected on both the client and the server.
 
 ### Non-functional
-- [ ] NFR-1: Simulation response in under 200 ms locally (5,000 households × 4 options is microseconds of math).
+- [ ] NFR-1: Simulation response in under 200 ms locally (5,000 households × 3 options is microseconds of math).
 - [ ] NFR-2: Reproducible: identical policy input gives byte-identical numeric results.
 - [ ] NFR-3: Security at hackathon scale: server-side input validation, no secrets anywhere, CORS limited to the dev origin, no stack traces in responses (see §15.2).
 - [ ] NFR-4: Understandable to a non-technical user. It passes when all of these hold:
-  - (a) No internal field name (`partialTransit`, `baseline`, `evAffinity`, camelCase, etc.) appears anywhere in the UI. Modes use the plain names in §6.0.
+  - (a) No internal field name (`transit`, `baseline`, `evAffinity`, camelCase, etc.) appears anywhere in the UI. Modes use the plain names in §6.0.
   - (b) Every displayed number carries a unit ($, $/yr, %, t CO2/yr, households).
   - (c) The plain-language summary sentence is shown for every result.
   - (d) Every card and chart title carries an "Estimate" tag.
@@ -128,7 +133,7 @@ policysim/
 │   │       ├── HouseholdGenerator.cs   # seeded synthetic population (BE1)
 │   │       ├── GeneratorSettings.cs    # distribution parameters (BE1)
 │   │       ├── Population.cs           # singleton: households + cached baseline outcomes (BE1)
-│   │       ├── TransportMode.cs        # enum Gas, Ev, PartialTransit, FullTransit (BE2)
+│   │       ├── TransportMode.cs        # enum Gas, Ev, Transit (BE2)
 │   │       ├── ModelConstants.cs       # every constant in §7.4 in one place (BE2)
 │   │       ├── ChoiceModel.cs          # per-household option costs, emissions, choice (BE2)
 │   │       └── SimulationService.cs    # runs baseline vs policy, aggregates → SimulationResponse (BE2)
@@ -180,15 +185,14 @@ policysim/
 
 ## 6. Data Model & Contracts (binding)
 
-Units: money is USD. Costs are **per household per year** unless the name says otherwise. Emissions are **metric tonnes CO2 per year for the whole population** in summaries, and kg in per-household internals. JSON uses camelCase. Mode enum strings on the wire are `"gas" | "ev" | "partialTransit" | "fullTransit"`.
+Units: money is USD. Costs are **per household per year** unless the name says otherwise. Emissions are **metric tonnes CO2 per year for the whole population** in summaries, and kg in per-household internals. JSON uses camelCase. Mode enum strings on the wire are `"gas" | "ev" | "transit"`.
 
 ### 6.0 UI display names and colors (`frontend/src/labels.ts`; the only strings the UI shows for modes)
 | Wire value | UI label (everywhere: cards, charts, tables, sentences) | Okabe-Ito color |
 |---|---|---|
 | `gas` | Drives gas car | vermillion `#D55E00` |
 | `ev` | Drives EV | bluish green `#009E73` |
-| `partialTransit` | Drives less + rides transit | sky blue `#56B4E9` |
-| `fullTransit` | No car, transit only | blue `#0072B2` |
+| `transit` | Uses public transit | blue `#0072B2` |
 | baseline / proposed | "Current law" / "Your policy" | grey `#999999` / orange `#E69F00` where a 2-series color is needed |
 
 ### 6.1 Household schema (internal to backend; exposed only by the stretch sample endpoint)
@@ -203,7 +207,7 @@ Units: money is USD. Costs are **per household per year** unless the name says o
 | `transportBudgetUsd` | int | ≥ 1,000 | `incomeUsd × U(0.10, 0.18)` — yearly amount the household is comfortable spending on transport |
 | `evAffinity` | double | 0–1 | `u²` with `u ~ U(0,1)` (skewed low, mean ≈ 0.33). This is the brief's "likelihood of purchasing an EV". |
 | `transitAccess` | enum | `none` 45% / `limited` 30% / `good` 25% | categorical draw |
-| `transitHassleUsd` | int | 500–8,000 | `U(500, 8000)`. Yearly dollar-equivalent inconvenience of going car-free. |
+| `transitHassleUsd` | int | 500–8,000 | `U(500, 8000)`. Yearly dollar-equivalent inconvenience of going car-free *with good access*. With `limited` access the model doubles it (§7.2). |
 
 ```csharp
 public enum IncomeBand { Low, Middle, High }
@@ -290,9 +294,9 @@ export interface PolicyInput {
 ### 6.3 Simulation output schema (response of `POST /api/simulate`)
 
 ```ts
-export type TransportMode = "gas" | "ev" | "partialTransit" | "fullTransit";
+export type TransportMode = "gas" | "ev" | "transit";
 
-export interface ModeCounts { gas: number; ev: number; partialTransit: number; fullTransit: number } // sums to householdCount
+export interface ModeCounts { gas: number; ev: number; transit: number } // sums to householdCount
 
 export interface ScenarioSummary {
   modeCounts: ModeCounts;
@@ -333,7 +337,8 @@ export interface SimulationResponse {
 
 C# mirror (`Contracts/SimulationResponse.cs`). Serialize enums as camelCase strings with `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`:
 ```csharp
-public sealed record ModeCounts(int Gas, int Ev, int PartialTransit, int FullTransit);
+public enum TransportMode { Gas, Ev, Transit }   // Domain/TransportMode.cs; wire: "gas" | "ev" | "transit"
+public sealed record ModeCounts(int Gas, int Ev, int Transit);
 public sealed record ScenarioSummary(ModeCounts ModeCounts, double AvgAnnualCostUsd, double TotalEmissionsTonnesCo2PerYear,
     double EmissionsPerHouseholdTonnesCo2PerYear);
 public sealed record Transition(TransportMode From, TransportMode To, int Count);
@@ -354,7 +359,14 @@ Rounding:
 - **Empty-group guard:** any mean over an empty set (e.g. an income band with 0 households) returns 0, never NaN. A NaN makes the serializer throw, which surfaces as a 500. The same applies to `emissionsChangePercent` when the baseline is 0.
 - Aggregation is a plain sequential loop. No `Parallel`/PLINQ, so the output is order-stable and byte-identical between runs.
 
-**Canonical example.** This JSON is the content of the frontend mock `frontend/src/mocks/simulationResponse.ts`, written as `export const mockResponse = { ... } satisfies SimulationResponse;`. Do not import it as a `.json` file: TypeScript widens `"gas"` to `string`, and then the mock no longer satisfies the type. BE1 also saves the same JSON as `backend/PolicySim.Api/Stub/simulationResponse.sample.json`; it is the Checkpoint 0 stub response and the contract test's reference. The numbers are illustrative and internally consistent, not calibrated.
+**Canonical example.** This JSON is the content of the frontend mock `frontend/src/mocks/simulationResponse.ts`, written as `export const mockResponse = { ... } satisfies SimulationResponse;`. Do not import it as a `.json` file: TypeScript widens `"gas"` to `string`, and then the mock no longer satisfies the type. BE1 also saves the same JSON as `backend/PolicySim.Api/Stub/simulationResponse.sample.json`; it is the Checkpoint 0 stub response and the contract test's reference.
+
+The numbers are the **verified output of the §6.1 generator + §7.2 model for preset B** (+$1.00, $7,500, $2.50; Architect's .NET run, Rev 4). They are internally consistent:
+- Counts sum to 5,000 overall and per band.
+- `transitions` sum to `householdsSwitched`.
+- The band-weighted cost change equals the overall cost change (−$107.18).
+
+The fixture is still **dev data, not demo narration**. §14 numbers come only from the team's build at Checkpoint 3.
 ```json
 {
   "modelVersion": "0.1.0",
@@ -362,47 +374,48 @@ Rounding:
   "policy": { "gasTaxChangeUsdPerGallon": 1.0, "evRebateUsd": 7500, "publicTransitFareUsdPerRide": 2.5 },
   "statusQuoPolicy": { "gasTaxChangeUsdPerGallon": 0.0, "evRebateUsd": 0, "publicTransitFareUsdPerRide": 2.5 },
   "baseline": {
-    "modeCounts": { "gas": 4210, "ev": 230, "partialTransit": 260, "fullTransit": 300 },
-    "avgAnnualCostUsd": 6850.00,
-    "totalEmissionsTonnesCo2PerYear": 21500.0,
-    "emissionsPerHouseholdTonnesCo2PerYear": 4.30
+    "modeCounts": { "gas": 4276, "ev": 116, "transit": 608 },
+    "avgAnnualCostUsd": 5532.40,
+    "totalEmissionsTonnesCo2PerYear": 19464.7,
+    "emissionsPerHouseholdTonnesCo2PerYear": 3.89
   },
   "proposed": {
-    "modeCounts": { "gas": 3720, "ev": 520, "partialTransit": 430, "fullTransit": 330 },
-    "avgAnnualCostUsd": 7120.56,
-    "totalEmissionsTonnesCo2PerYear": 19870.5,
-    "emissionsPerHouseholdTonnesCo2PerYear": 3.97
+    "modeCounts": { "gas": 3159, "ev": 1170, "transit": 671 },
+    "avgAnnualCostUsd": 5425.22,
+    "totalEmissionsTonnesCo2PerYear": 15116.9,
+    "emissionsPerHouseholdTonnesCo2PerYear": 3.02
   },
   "changes": {
-    "householdsSwitched": 490,
-    "householdsSwitchedPercent": 9.8,
-    "avgAnnualCostChangeUsd": 270.56,
-    "emissionsChangeTonnesCo2PerYear": -1629.5,
-    "emissionsChangePercent": -7.6
+    "householdsSwitched": 1165,
+    "householdsSwitchedPercent": 23.3,
+    "avgAnnualCostChangeUsd": -107.18,
+    "emissionsChangeTonnesCo2PerYear": -4347.8,
+    "emissionsChangePercent": -22.3
   },
   "transitions": [
-    { "from": "gas", "to": "ev", "count": 290 },
-    { "from": "gas", "to": "partialTransit", "count": 170 },
-    { "from": "gas", "to": "fullTransit", "count": 30 }
+    { "from": "gas", "to": "ev", "count": 1006 },
+    { "from": "gas", "to": "transit", "count": 111 },
+    { "from": "transit", "to": "ev", "count": 48 }
   ],
   "byIncomeBand": [
-    { "incomeBand": "low", "householdCount": 1600,
-      "baselineModeCounts": { "gas": 1290, "ev": 0, "partialTransit": 130, "fullTransit": 180 },
-      "policyModeCounts":   { "gas": 1160, "ev": 40, "partialTransit": 210, "fullTransit": 190 },
-      "avgAnnualCostChangeUsd": 310.25 },
-    { "incomeBand": "middle", "householdCount": 2500,
-      "baselineModeCounts": { "gas": 2190, "ev": 90, "partialTransit": 110, "fullTransit": 110 },
-      "policyModeCounts":   { "gas": 1950, "ev": 250, "partialTransit": 190, "fullTransit": 110 },
-      "avgAnnualCostChangeUsd": 280.10 },
-    { "incomeBand": "high", "householdCount": 900,
-      "baselineModeCounts": { "gas": 730, "ev": 140, "partialTransit": 20, "fullTransit": 10 },
-      "policyModeCounts":   { "gas": 610, "ev": 230, "partialTransit": 30, "fullTransit": 30 },
-      "avgAnnualCostChangeUsd": 173.50 }
+    { "incomeBand": "low", "householdCount": 1463,
+      "baselineModeCounts": { "gas": 1233, "ev": 0, "transit": 230 },
+      "policyModeCounts":   { "gas": 821, "ev": 395, "transit": 247 },
+      "avgAnnualCostChangeUsd": -237.59 },
+    { "incomeBand": "middle", "householdCount": 2559,
+      "baselineModeCounts": { "gas": 2192, "ev": 84, "transit": 283 },
+      "policyModeCounts":   { "gas": 1687, "ev": 558, "transit": 314 },
+      "avgAnnualCostChangeUsd": -51.22 },
+    { "incomeBand": "high", "householdCount": 978,
+      "baselineModeCounts": { "gas": 851, "ev": 32, "transit": 95 },
+      "policyModeCounts":   { "gas": 651, "ev": 217, "transit": 110 },
+      "avgAnnualCostChangeUsd": -58.52 }
   ],
   "assumptions": [
     "Results are exploratory estimates from a simplified rule-based model, not predictions.",
     "5,000 synthetic households are generated from a fixed random seed; no real people are represented.",
-    "Each household picks the transport option with the lowest yearly cost, including a personal 'hassle cost' for changing habits.",
+    "Each household picks the cheapest of three options (keep a gas car, switch to an EV, or go car-free and use public transit), counting a personal 'hassle cost' for changing habits.",
+    "Driving less or using transit part-time is not modeled.",
     "Gas tax is added to a $3.50/gallon base price. EV rebates are spread over an 8-year vehicle life.",
     "Rebates are capped at $12,000, the assumed extra cost of an EV; a larger rebate would not change choices in this model.",
     "Government budget effects (gas tax revenue, rebate spending) are not included.",
@@ -438,7 +451,7 @@ Only `400` and `500` are produced deliberately.
 ## 7. Simulation Model (BE2 owns; BE1 co-owns calibration)
 
 ### 7.1 Idea in one sentence (use it in the UI)
-> Each household compares the yearly cost of four options (keep the gas car, buy an EV, use transit for some trips, go car-free) and picks the cheapest. "Cost" includes real money plus a personal hassle cost for changing habits, and options that would blow the household's transport budget get an extra penalty.
+> Each household compares the yearly cost of three options (keep the gas car, buy an EV, or go car-free and use public transit) and picks the cheapest. "Cost" includes real money plus a personal hassle cost for changing habits, and options that would blow the household's transport budget get an extra penalty.
 
 This implements the brief's three example rules directly:
 - "Gas costs exceed budget → more likely to switch" is the **budget stress penalty**.
@@ -452,26 +465,22 @@ gasPrice            = BASE_GAS_PRICE + p.gasTaxChangeUsdPerGallon
 gasCostPerMile      = gasPrice / h.vehicleMpg + GAS_VEHICLE_COST_PER_MILE
 evCostPerMile       = EV_KWH_PER_MILE * ELECTRICITY_PRICE + EV_VEHICLE_COST_PER_MILE
 evNetPremium        = max(0, EV_PRICE_PREMIUM - p.evRebateUsd)
-ridesFull           = h.annualMiles / TRANSIT_MILES_PER_RIDE
-ridesPartial        = PARTIAL_SHARE * ridesFull
+rides               = h.annualMiles / TRANSIT_MILES_PER_RIDE
 
 -- out-of-pocket yearly cost (what we REPORT as household cost)
-cost[gas]            = VEHICLE_FIXED_COST + h.annualMiles * gasCostPerMile
-cost[ev]             = VEHICLE_FIXED_COST + h.annualMiles * evCostPerMile + evNetPremium / EV_AMORTIZATION_YEARS
-cost[partialTransit] = VEHICLE_FIXED_COST + (1 - PARTIAL_SHARE) * h.annualMiles * gasCostPerMile
-                       + ridesPartial * p.publicTransitFareUsdPerRide
-cost[fullTransit]    = ridesFull * p.publicTransitFareUsdPerRide
+cost[gas]     = VEHICLE_FIXED_COST + h.annualMiles * gasCostPerMile
+cost[ev]      = VEHICLE_FIXED_COST + h.annualMiles * evCostPerMile + evNetPremium / EV_AMORTIZATION_YEARS
+cost[transit] = rides * p.publicTransitFareUsdPerRide            -- car-free: no VEHICLE_FIXED_COST
 
 -- hassle (perceived, NOT reported as money spent)
-hassle[gas]            = 0
-hassle[ev]             = (1 - h.evAffinity) * EV_MAX_HESITANCY
-hassle[partialTransit] = PARTIAL_HASSLE_FACTOR * h.transitHassleUsd
-hassle[fullTransit]    = h.transitHassleUsd
+hassle[gas]     = 0
+hassle[ev]      = (1 - h.evAffinity) * EV_MAX_HESITANCY
+hassle[transit] = h.transitHassleUsd                                    if h.transitAccess == good
+                = LIMITED_ACCESS_HASSLE_MULTIPLIER * h.transitHassleUsd if h.transitAccess == limited
 
 -- availability gates
-ev available             iff evNetPremium <= EV_UPFRONT_AFFORDABILITY_SHARE * h.incomeUsd
-partialTransit available iff h.transitAccess in {limited, good}
-fullTransit available    iff h.transitAccess == good
+ev available      iff evNetPremium <= EV_UPFRONT_AFFORDABILITY_SHARE * h.incomeUsd
+transit available iff h.transitAccess in {limited, good}     (never for `none`)
 gas always available
 
 -- budget stress
@@ -479,15 +488,21 @@ penalty[m]   = BUDGET_STRESS_MULTIPLIER * max(0, cost[m] - h.transportBudgetUsd)
 
 perceived[m] = cost[m] + hassle[m] + penalty[m]
 choice       = argmin over available m of perceived[m]
-               ties broken in order gas, ev, partialTransit, fullTransit (prefer the status quo)
+               ties broken in order gas, ev, transit (prefer the status quo)
 ```
+
+**Transit access gate: `limited` is allowed, with doubled hassle.** I chose this over "`good` only" for three reasons:
+1. It keeps all three `transitAccess` levels meaningful without changing the frozen `Household` shape. Under "`good` only", `limited` would behave exactly like `none`.
+2. It gives a smoother, more realistic response to fares, because more households sit near the decision margin.
+3. It is the option that passes calibration. With "`good` only", preset A switches just 4.8% of households, below the 5% floor. With doubled hassle, A switches 6.0% (verified run below).
+
+The access gate still exists: `none` can never choose transit.
 
 **Emissions (kg CO2 per year, per household):**
 ```
-emis[gas]            = h.annualMiles / h.vehicleMpg * CO2_KG_PER_GALLON
-emis[ev]             = h.annualMiles * EV_KWH_PER_MILE * GRID_CO2_KG_PER_KWH
-emis[partialTransit] = (1 - PARTIAL_SHARE) * emis[gas] + PARTIAL_SHARE * h.annualMiles * TRANSIT_CO2_KG_PER_PASSENGER_MILE
-emis[fullTransit]    = h.annualMiles * TRANSIT_CO2_KG_PER_PASSENGER_MILE
+emis[gas]     = h.annualMiles / h.vehicleMpg * CO2_KG_PER_GALLON
+emis[ev]      = h.annualMiles * EV_KWH_PER_MILE * GRID_CO2_KG_PER_KWH
+emis[transit] = h.annualMiles * TRANSIT_CO2_KG_PER_PASSENGER_MILE
 ```
 
 Suggested shape: `ChoiceModel.Evaluate(Household h, Policy p) → HouseholdOutcome(TransportMode Mode, double AnnualCostUsd, double AnnualEmissionsKg)`. It takes the validated domain `Policy`, not the wire DTO. The function is pure and static, with no I/O.
@@ -496,7 +511,7 @@ Suggested shape: `ChoiceModel.Evaluate(Household h, Policy p) → HouseholdOutco
 - `baselineOutcomes` = `Evaluate(h, StatusQuo)` for all households, computed **once at startup** and cached in `Population`.
 - `policyOutcomes` = `Evaluate(h, policy)` per request.
 - `modeCounts` = count per mode. `avgAnnualCostUsd` = mean cost. `totalEmissionsTonnesCo2PerYear` = Σ emissions / 1000.
-- `householdsSwitched` = count where `baseline.Mode != policy.Mode`, **in either direction**. A gas tax cut moves households *toward* gas (e.g. `partialTransit → gas`, `ev → gas`); that still counts as switching, and `transitions` shows the direction. `transitions` groups switchers by (from, to).
+- `householdsSwitched` = count where `baseline.Mode != policy.Mode`, **in either direction**. A gas tax cut moves households *toward* gas (e.g. `transit → gas`, `ev → gas`); that still counts as switching, and `transitions` shows the direction. `transitions` groups switchers by (from, to).
 - `avgAnnualCostChangeUsd` = mean(policy cost − baseline cost). Use the same formula per income band.
 - `emissionsChangePercent` = 100 × change / baseline total (the baseline is never 0 in practice; guard against it anyway).
 
@@ -512,10 +527,9 @@ Suggested shape: `ChoiceModel.Evaluate(Household h, Policy p) → HouseholdOutco
 | `EV_AMORTIZATION_YEARS` | 8 | years | premium (net of rebate) spread over vehicle life |
 | `EV_UPFRONT_AFFORDABILITY_SHARE` | 0.20 | fraction of income | max net premium a household can pay up front. 0.10 failed calibration (EV 0.7%). |
 | `EV_MAX_HESITANCY` | 4,000 | USD/yr | hassle at `evAffinity = 0` (range anxiety, charging access) |
-| `VEHICLE_FIXED_COST` | 3,000 | USD/yr | insurance, registration, base depreciation; saved only by `fullTransit` |
+| `VEHICLE_FIXED_COST` | 3,000 | USD/yr | insurance, registration, base depreciation; saved only by `transit` (car-free) |
 | `TRANSIT_MILES_PER_RIDE` | 10 | mi/ride | |
-| `PARTIAL_SHARE` | 0.40 | fraction of miles | share of miles moved to transit under `partialTransit` |
-| `PARTIAL_HASSLE_FACTOR` | 0.25 | × `transitHassleUsd` | commute-only trips are the easy ones |
+| `LIMITED_ACCESS_HASSLE_MULTIPLIER` | 2.0 | × `transitHassleUsd` | **new in Rev 4.** Car-free living with limited transit access is harder. Sensitivity: 1.5 → A 5.8%, 3.0 → A 5.4%; all bands pass across 1.5–3.0. |
 | `BUDGET_STRESS_MULTIPLIER` | 0.5 | × USD over budget | |
 | `CO2_KG_PER_GALLON` | 8.887 | kg/gal | US EPA figure for gasoline |
 | `GRID_CO2_KG_PER_KWH` | 0.37 | kg/kWh | approx. US grid average |
@@ -529,24 +543,38 @@ Suggested shape: `ChoiceModel.Evaluate(Household h, Policy p) → HouseholdOutco
 
 The model reacts in the expected direction, and the size of the reaction depends on the spread of household parameters.
 
-**Verified by the backend reviewer** (actual .NET run of §6.1 + §7.2, seed 42, `EV_UPFRONT_AFFORDABILITY_SHARE = 0.20`):
-- Current law: gas 89.0% / EV 2.5% / transit 8.5%, 3.99 t CO2 per household.
-- Households switched: A (tax only) 6.2%, B (brief package) 23.9%, C (carrots only) 24.6%.
-- Scenario A's switches split three ways: EV +59, partial transit +78, full transit +89.
-- The current-law zero-change check and all monotonicity sweeps pass.
+**Verified 3-mode run (Rev 4).** This was an actual .NET 10 run of §6.1 + §7.2 with exactly the constants above, seed 42, 5,000 households:
 
-These are reference values. The demo numbers are whatever the team's build produces at Checkpoint 3.
+| Policy | Gas car | EV | Public transit | Households switched |
+|---|---|---|---|---|
+| Current law | 85.5% | 2.3% | 12.2% | 0 (0.0%) |
+| A: +$1.00 tax | 79.5% | 5.2% | 15.3% | 302 (6.0%), all leaving gas: 143 to EV, 159 to transit |
+| B: +$1.00, $7,500, $2.50 | 63.2% | 23.4% | 13.4% | 1,165 (23.3%) |
+| C: $0, $7,500, $1.00 | 66.1% | 12.7% | 21.2% | 985 (19.7%) |
+| D: −$0.50 tax | 87.8% | 1.3% | 10.8% | 116 (2.3%), all *toward* gas: 50 from EV, 66 from transit |
+
+Other results:
+- Emissions at current law: 3.89 t CO2 per household per year.
+- **Current-law zero-change check: passes.** Switched 0, cost change 0, emissions change 0.
+- **Monotonicity: passes on every sweep.**
+  - Gas count is non-increasing over gas tax −0.50 → 3.00 (step 0.25).
+  - EV count is non-decreasing over rebate 0 → 12,000 (step 1,000).
+  - Transit count is non-increasing over fare 0 → 10 (step 0.50).
+  - Additional per-household check: as the tax rises in $0.05 steps, no household ever switches *to* gas.
+
+These are reference values for BE2's calibration test, not demo lines. The demo numbers are whatever the team's build produces at Checkpoint 3.
 
 ### 7.5 Calibration targets (status quo, checked by a test)
 | Metric | Target band |
 |---|---|
 | `gas` share | 75–90% |
 | `ev` share | 2–8% |
-| `partialTransit` + `fullTransit` share | 5–15% |
+| `transit` share | 5–15% |
 | Each demo preset A/B/C, households switched | 5–30% |
+| Preset D (gas tax cut), households switched, all toward `gas` | 1–10% |
 | Emissions per household (baseline mean) | 3–6 t/yr |
 
-If the result falls outside a band, tune the knobs in this order: `EV_MAX_HESITANCY`, `transitHassleUsd` range, `PARTIAL_HASSLE_FACTOR`, `EV_UPFRONT_AFFORDABILITY_SHARE`. **Any change bumps `modelVersion`.** Calibration is time-boxed to 45 minutes. Plausible output is enough; the model does not need to be accurate.
+If the result falls outside a band, tune the knobs in this order: `EV_MAX_HESITANCY`, `transitHassleUsd` range, `LIMITED_ACCESS_HASSLE_MULTIPLIER`, `EV_UPFRONT_AFFORDABILITY_SHARE`. **Any change bumps `modelVersion`.** Calibration is time-boxed to 45 minutes. Plausible output is enough; the model does not need to be accurate.
 
 **Gating:**
 - The calibration test **does not block** anything before Checkpoint 2. Mark it `[Trait("Category","Calibration")]` so it can be excluded from early runs.
@@ -719,10 +747,10 @@ FE1 should add a one-line note at the top of both draft files: "Superseded for M
 7. **Risks:**
    - The model is too strong or too weak (nobody switches, or everybody does). Mitigation: wide hassle distributions and the calibration knobs in §7.5.
    - Off-by-sign errors in "change" fields (always policy − baseline).
-   - Partial transit never chosen. Check with a hand case: a low-mpg household with low hassle.
+   - The `limited` access path being wrong, e.g. forgetting the multiplier or letting `none` choose transit. Write a hand case for each access level.
 8. **Minimal version:**
-   - Three modes: merge partial into full transit, then split later.
    - No budget penalty.
+   - One transit hassle for both `limited` and `good` (drop the multiplier, then add it back for calibration).
    - `byIncomeBand` and `transitions` (CUT-FIRST) can be returned as empty arrays, which is still contract-valid. They are filled in later by running the same aggregation code over a filtered list.
 9. **Stretch:**
    - Fiscal block: `gasTaxRevenueUsdPerYear` and `rebateSpendingUsdPerYear`. This is an additive schema change, so announce it first.
@@ -797,10 +825,10 @@ FE1 should add a one-line note at the top of both draft files: "Superseded for M
      - Average yearly cost change in signed $ **and %**. Compute the % as `changes.avgAnnualCostChangeUsd / baseline.avgAnnualCostUsd`.
      - Emissions change in tonnes and %, **plus per household** (current law vs. your policy, t CO2/yr). This card replaces a separate emissions chart.
    - `ModeShiftChart`:
-     - Grouped bars, Current law vs. Your policy, for the 4 modes, using the §6.0 labels and colors.
+     - Grouped bars, Current law vs. Your policy, for the 3 modes, using the §6.0 labels and colors.
      - Value labels on the bars, an `aria-label` / caption, and a "Show as table" toggle that renders the same numbers in a `<table>`.
    - `CostByIncomeChart` (**CUT-FIRST**; start only after Checkpoint 2 passes): same requirements as the mode chart (table alternative, value labels, Estimate tag). Hidden when `byIncomeBand` is empty.
-   - `PlainLanguageSummary`: sentences generated from the response, using the §6.0 labels. For example: "Under this policy, 490 of 5,000 households (9.8%) change how they get around: 290 switch to driving an EV and 200 start using transit. Average yearly transport cost rises $271 (+3.9%); CO2 falls 7.6%." Shown for every result. When there is no change: "No households change behavior under this policy."
+   - `PlainLanguageSummary`: sentences generated from the response, using the §6.0 labels. For example, generated from the mock: "Under this policy, 1,165 of 5,000 households (23.3%) change how they get around: 1,054 switch to driving an EV and 111 switch to public transit. Average yearly transport cost falls $107 (−1.9%); CO2 falls 22.3%." The sentence is built from `transitions` grouped by `to`. If `transitions` was cut, fall back to the net change in `modeCounts`. Shown for every result. When there is no change: "No households change behavior under this policy."
    - `ScenarioComparison` table (§7.6), with the disclaimer directly above it.
    - `HowItWorks`: disclaimer, the §7.1 sentence, `assumptions[]`, model version.
 3. **Files:** `components/results/*`, `mocks/simulationResponse.ts`, `labels.ts`.
@@ -869,12 +897,12 @@ Times are relative to the start (T+0:00). Assumes about 8 hours including a 30-m
 | Generator ranges/count | BE1 | Exactly 5,000 households, every field within the §6.1 range, unique ids, all 3 income bands and 3 access levels present. |
 | Validator unit (`ValidatorTests`) | BE1 | Each field at min/max passes. min−ε, max+ε, `+∞`, `−∞`, NaN, and `null` each produce an error under the right key (`"Required."` for null). Valid input maps to a `Policy` with the same values. |
 | **API boundary (`ApiTests`, WebApplicationFactory)** | BE1 | Real HTTP POSTs to `/api/simulate`, each expecting **400 with a `ValidationProblem` body** (`errors` present) under the stated key:<br>• empty body → `body`<br>• `{}` → all 3 fields "Required."<br>• missing field → that field<br>• `null` field → that field<br>• `"1.0"` string → that field<br>• unknown extra field → `body` (or the reported path)<br>• malformed JSON (`{"evRebateUsd":`) → `body`<br>• `1e400` → that field<br>• no Content-Type → `body`<br>Never a bare 400 or a 415. Plus: a valid fixture policy → 200, and a forced exception → 500 with no stack text. |
-| **Contract (`ContractTests`, WebApplicationFactory)** | BE1 | POST the §6.3 fixture policy. Recursively collect the **key paths** of the live JSON (for arrays, the union of their element keys) and assert they equal the key paths of `Stub/simulationResponse.sample.json`, which is the same JSON as the FE mock. Also assert every mode value in `transitions[].from/to` is one of `gas, ev, partialTransit, fullTransit`, and every `incomeBand` value is one of `low, middle, high`. **Keys and enum spellings only, not values.** Run at Checkpoint 2. |
+| **Contract (`ContractTests`, WebApplicationFactory)** | BE1 | POST the §6.3 fixture policy. Recursively collect the **key paths** of the live JSON (for arrays, the union of their element keys) and assert they equal the key paths of `Stub/simulationResponse.sample.json`, which is the same JSON as the FE mock. Also assert every mode value in `transitions[].from/to` is one of `gas, ev, transit` (and that `modeCounts` has exactly these three keys), and every `incomeBand` value is one of `low, middle, high`. **Keys and enum spellings only, not values.** Run at Checkpoint 2. |
 | **Determinism** | BE2 | `Run(policy)` twice, serialized with the app's JSON options, gives **byte-identical** strings. Check with the demo policies. |
 | Choice hand cases | BE2 | 4+ handcrafted households (one per mode), with expected cost and emissions computed by hand to ±$0.01. |
-| Gates | BE2 | An EV that is unaffordable is never chosen. A household with `transitAccess=none` is never transit. A `limited` household is never `fullTransit`. |
+| Gates | BE2 | An EV that is unaffordable is never chosen. A household with `transitAccess=none` is never `transit`. Two otherwise-identical households, one `limited` and one `good`: the `limited` one's transit perceived cost is higher by exactly `(LIMITED_ACCESS_HASSLE_MULTIPLIER − 1) × transitHassleUsd`. |
 | **Status-quo fixed point** | BE2 | `Run(StatusQuo)` gives switched = 0, cost change = 0, emissions change = 0 (serialized `0`, not `-0`), and empty transitions. |
-| **Monotonicity** | BE2 | Over gas tax −0.50 → 3 (step 0.25), the `gas` count is non-increasing (so a cut never *reduces* gas drivers). Over rebate 0 → 12,000 (step 1,000), the `ev` count is non-decreasing. Over fare 0 → 10 (step 0.50), the `partialTransit + fullTransit` count is non-increasing. |
+| **Monotonicity** | BE2 | Over gas tax −0.50 → 3 (step 0.25), the `gas` count is non-increasing (so a cut never *reduces* gas drivers). Over rebate 0 → 12,000 (step 1,000), the `ev` count is non-decreasing. Over fare 0 → 10 (step 0.50), the `transit` count is non-increasing. (All three were verified on the seed-42 population in Rev 4; see §7.4.) |
 | Conservation | BE2 | Mode counts sum to 5,000 overall and per band, and the transition counts sum to `householdsSwitched`. |
 | Calibration *(non-gating before Checkpoint 2; see §7.5)* | BE2 | §7.5 bands. This is the "is the demo believable" test. A miss after the time box goes in README "Known deviations". |
 | Edge policies | BE2 | All-max and all-min policies run without NaN/∞. A $0 fare and a $12,000 rebate (net premium 0) work. An empty income band produces a mean of 0, not NaN (test with a hand-built 3-household population). |
@@ -903,7 +931,7 @@ Times are relative to the start (T+0:00). Assumes about 8 hours including a 30-m
 Each line has a recommended answer. Accepting the whole list as-is is a valid outcome.
 
 1. Gas tax = **signed change** to a $3.50 base, cuts allowed down to −$0.50 (A-1). ✅ decided
-2. **One primary mode** per household, 4 modes (A-2). ☐
+2. **One mode** per household, 3 modes: gas, EV, public transit (car-free). No partial or reduced driving (A-2). ☐
 3. Baseline = **status-quo policy run on the same population** (A-3). ☐
 4. **Fixed seed 42**, no seed or household count in the request (A-4). ☐
 5. Units: USD per household per year; tonnes CO2 per year for the population (§6). ☐
@@ -926,13 +954,13 @@ Each line has a recommended answer. Accepting the whole list as-is is a valid ou
 
 **Rule:** every `[bracketed]` item is filled at Checkpoint 3 from what the app actually shows, including the *words*: which mode grew most, whether cost rose or fell, and which income band was hit hardest. Do not state an outcome before it has been observed. If an observed result contradicts a story beat, change the beat, not the model. The team must not tune constants to fit the script after Checkpoint 3.
 
-Reference values from the backend reviewer's run, for orientation only:
-- Scenario A's switches split three ways: EV +59, partial transit +78, full transit +89. So A is **not** "mostly partial transit".
-- Households switched: A 6.2%, B 23.9%, C 24.6%.
+Reference values from the verified Rev 4 run (§7.4), for orientation only. Do not read these aloud. Re-observe them in the team's build.
+- Households switched: A 6.0%, B 23.3%, C 19.7%, D 2.3% (toward gas).
+- A's switchers split roughly evenly between EV and transit, so neither "mostly EV" nor "mostly transit" is safe to say in advance.
 
 1. **Frame (30 s).** "Legislators rarely get to test a transportation policy before passing it. PolicySim simulates 5,000 synthetic households so you can explore likely trade-offs. These are exploratory estimates, not predictions." Point to the disclaimer.
 2. **Current law (30 s).** Click the *Current law* preset and Run. "Nothing changes. That's our baseline: [X]% drive a gas car, [Y]% drive an EV, [Z]% use transit." This shows the model is consistent with itself.
-3. **Scenario A: gas tax only, +$1.00/gal (60 s).** Run it. "[n] households ([p]%) change behavior: [observed split, e.g. 'roughly evenly between EVs, part-time transit and going car-free']. Emissions [fall/rise] [a]%, and average yearly cost [rises/falls] $[c] ([c%]%)." *If the income chart was kept:* "[Observed band] households see the largest cost change, $[cb]."
+3. **Scenario A: gas tax only, +$1.00/gal (60 s).** Run it. "[n] households ([p]%) change behavior: [observed split between switching to an EV and switching to public transit]. Emissions [fall/rise] [a]%, and average yearly cost [rises/falls] $[c] ([c%]%)." *If the income chart was kept:* "[Observed band] households see the largest cost change, $[cb]."
 4. **Scenario B: the brief's package, +$1.00 tax, $7,500 rebate, $2.50 fare (60 s).** "Adding the rebate brings EV drivers to [m] households (from [Y0]). Emissions [fall] [b]%, [more/less] than with the tax alone. Average cost [rises/falls] $[cB]."
 5. **Scenario C: carrots only, $0 tax, $7,500 rebate, $1.00 fare (60 s).** "Without a tax, average household cost [rises/falls] $[cC], and emissions [fall] [d]%, [more/less] than in B."
 6. **Compare (45 s).** Open the comparison table, which has A, B, and C side by side with current law, under its disclaimer. "[One observed trade-off sentence, e.g. which scenario cut the most CO2 vs. which cost households least]. You can see that before writing the bill."
@@ -965,7 +993,7 @@ Backup: screenshots of steps 2–6, captured at Checkpoint 3, in case the laptop
 - The status-quo run (empty `transitions`, all changes 0, no `-0`, and no divide-by-zero in percentages).
 - A rebate of exactly $12,000 (net premium 0) and $12,001 (rejected).
 - Gas tax of exactly −0.50 (accepted, pump price $3.00) and −0.51 (rejected). A gas tax of `-0.0` is treated as 0.
-- A $0 fare (`fullTransit` out-of-pocket cost is $0, and hassle still applies).
+- A $0 fare (`transit` out-of-pocket cost is $0, hassle still applies, and `none`-access households still cannot choose it).
 
 ### 15.2 Security posture (Architect review, hackathon scale)
 **Verdict: PASS WITH ITEMS.** The security posture matches a local demo with synthetic data. These are the items to implement.
@@ -1021,3 +1049,10 @@ Backup: screenshots of steps 2–6, captured at Checkpoint 3, in case the laptop
   - Gas tax cuts allowed. The field is renamed `gasTaxChangeUsdPerGallon` (signed), with range −0.50 to +3.00. Switching is counted in both directions. Preset D "Gas tax cut" added. The monotonicity sweep, validation edges and frontend checklist were extended to cover negative values.
   - .NET 10 (`net10.0`) chosen.
   - OQ-4 (hosted URL) and OQ-5 (delete `Compute.cs`) are left to the team.
+- 2026-11-14: Rev 4 (user decision: no partial transit or reduced driving):
+  - The model has 3 modes: `gas`, `ev`, `transit` (car-free). `partialTransit`/`fullTransit`, `PARTIAL_SHARE` and `PARTIAL_HASSLE_FACTOR` are removed.
+  - Transit is available to `limited` and `good` access. New constant `LIMITED_ACCESS_HASSLE_MULTIPLIER = 2.0`.
+  - Updated: A-2, FR-4, §6.0 labels and colors ("Uses public transit", blue), the TS/C# `TransportMode` and `ModeCounts`, §7.1–7.5, the gates and monotonicity tests, the contract enum list, FE chart text, kickoff item 2, §14 references, and the edge cases.
+  - The §6.3 fixture is regenerated from a verified run of preset B.
+  - Calibration was re-verified with a .NET 10 run (§7.4): every band passes, the zero-change check passes, and all monotonicity sweeps pass. A preset-D band was added.
+  - `modelVersion` stays `0.1.0`, because no code has shipped yet.
