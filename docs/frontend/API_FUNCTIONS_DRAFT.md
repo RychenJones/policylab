@@ -1,8 +1,8 @@
 # API Functions and Failure Handling Draft
 
-Status: proposed API interfaces aligned with the current simulator, not an implementation. Complements [API_DRAFT.md](API_DRAFT.md). The wrapper contracts below are proposed; current model functions are `Simulator.Simulate(double gasTax, double evRebate, double transitFare)` and `Simulator.PolicyEffect(double gasTax, double evRebate, double transitFare)`, both returning `Result(GasPct, EvPct, OtherPct)` synchronously.
+Minimum transport implementation and rebuild reference. [API_DRAFT.md](API_DRAFT.md) defines the full target wire contract. Plain JavaScript is selected. Backend and UI integration are pending; the client is independently testable and is not imported by the existing app yet.
 
-Frontend language decision: use plain JavaScript. React remains optional; it does not change the language choice. TypeScript declarations below are retained only as draft contract notation, not implementation requirements. Implement frontend functions in JavaScript, with optional JSDoc for documentation. C# examples assume, but do not mandate, the proposed backend language. The wire contracts and error/cancellation rules apply regardless of implementation language.
+## Exported interface
 
 ## Frontend contracts
 
@@ -201,118 +201,59 @@ Any endpoint can encounter infrastructure rejection or unexpected HTTP responses
 
 | Status | Proposed application code | Meaning and frontend action |
 | --- | --- | --- |
-| 400 | `invalid_request` or `validation_failed` | Malformed JSON, missing fields, unknown fields, invalid types/ranges. Display field errors when present; preserve inputs. |
-| 401 | `authentication_required` | If authentication is introduced, request sign-in; do not loop retries. Preserve any authentication challenge header. |
-| 403 | `forbidden` | Access denied; display an access message. |
-| 404 | `not_found` | Missing route/resource. An unavailable route can indicate a deployment mismatch. |
-| 405 | `method_not_allowed` | Route does not support the method; preserve `Allow`. Check QUERY routing/proxy configuration. |
-| 406 | `not_acceptable` | Requested response format unsupported. Client normally requests JSON. |
-| 408 | `request_timeout` | HTTP request receipt timeout; distinguish from local timeout and computation deadline. |
-| 409 | `conflict` | Future write conflicts with existing state. Ask user to reconcile; do not repeat blindly. |
-| 413 | `payload_too_large` | Request exceeds configured body limit. Show a size-limit message. |
-| 415 | `unsupported_media_type` | Missing/unsupported body content type under this API's JSON policy. |
-| 422 | `unsupported_scenario` | Reserved for a future explicit model constraint. The current model has no such rejection; extrapolation warnings remain successful responses. |
-| 429 | `rate_limited` | Too many requests; respect `Retry-After` when supplied. |
-| 500 | `internal_error` or `simulation_numerical_failure` | Unexpected failure or invalid numerical output. Display a safe message and trace ID if available. |
-| 501 | `method_not_implemented` | An intermediary/server does not implement QUERY; check deployment support. |
-| 502 | `upstream_failure` | Gateway or required dependency returned an invalid response. |
-| 503 | `service_unavailable` | Temporary overload, unavailable dependency, or shutdown; respect `Retry-After`. |
-| 504 | `execution_timeout` | Configured server computation deadline or gateway timeout. Offer a manual retry. |
+| `getHealth(options?)` | Health object | GET `/api/health` |
+| `getConfig(options?)` | Config object | GET `/api/config` |
+| `runSimulation(policy, options?)` | Simulation object | POST `/api/simulate` |
 
-These codes describe responses we control. Proxies can return different codes, plain text, HTML, or no body. An HTTP failure stays `kind: "http"` even when its body cannot be parsed: synthesize a safe generic problem using the actual HTTP status. Do not display raw HTML or untrusted server body text.
+Success returns parsed JSON unchanged. Failure throws `ApiError extends Error` with `status`, `message`, and optional `code`, `fieldErrors`, and `formError`. There is no `ApiResult`/`ok` envelope. `options` currently accepts only `{ signal }`; there is no automatic timeout or retry.
 
-Use the actual HTTP response status for classification, even if a problem body's `status` disagrees. Application `code` is for stable branching; never branch on human-readable `title` or `detail`. Use a generic fallback when `code` is absent or unknown.
+Default functions use `/api`. `createApi({ baseUrl, fetchImpl })` creates an instance for alternate hosting or tests. Passing dependencies explicitly keeps the transport independent of a framework, global configuration script, server process, or UI layout.
 
-Example 400 body:
+```js
+import { ApiError, runSimulation } from './api.js';
 
-```json
-{
-  "type": "about:blank",
-  "title": "Bad Request",
-  "status": 400,
-  "code": "validation_failed",
-  "errors": {
-    "gasTaxUsdPerGallon": ["Gas tax adjustment must keep the resulting gas price positive."]
-  },
-  "traceId": "server-generated-correlation-id"
+// The frontend owner supplies renderResults and showError when wiring the form.
+try {
+  const result = await runSimulation({
+    gasTaxChangeUsdPerGallon: 1,
+    evRebateUsd: 7500,
+    publicTransitFareUsdPerRide: 2.5
+  });
+  renderResults(result);
+} catch (error) {
+  if (error instanceof ApiError) showError(error.message, error.fieldErrors, error.formError);
+  else throw error;
 }
 ```
 
-## Cancellation and timeout behavior
+## Failure rules
 
-| Event | Frontend outcome | Backend behavior |
+| Failure | Representation | UI obligation when integrated |
 | --- | --- | --- |
-| Signal already aborted | `cancelled`; do not send | No request expected. |
-| User cancels or component unmounts | `cancelled`; no error toast | Adapter can stop between model calls; an active model call continues. |
-| A newer scenario supersedes an older request | Cancel old request; only newest request may update the UI | Same cancellation limit; no guarantee that old computation stops immediately. |
-| Local deadline expires | `timeout`; preserve inputs and allow retry | May observe disconnection; stopping is not guaranteed to be immediate. |
-| Server deadline expires, if configured | HTTP 504 if response can still be written | Track the deadline separately; current model cannot be interrupted mid-call or guarantee prompt timeout completion. |
-| Connection disappears | `network` unless a known local abort caused it | Adapter observes signaled token between calls; a response may be impossible. |
+| HTTP validation | Actual status; known request keys in `fieldErrors`, other error keys joined in `formError` | Display inline/form messages and preserve inputs. |
+| Other HTTP failure | Actual status, safe status message, optional server code | Preserve previous results; never show raw response HTML/text. |
+| Network failure | Status 0, code `network_error` | Connectivity message and manual retry. |
+| Caller cancellation | Status 0, code `cancelled` | No failure toast; honor reset/navigation state. |
+| Invalid success JSON or missing core containers | Actual 2xx status, code `invalid_response` | Do not render as a successful simulation. |
 
-Combine caller cancellation and a local deadline without losing the cause. Record the first observed terminal outcome; do not relabel an already received HTTP failure because a timer fires later. Apply the deadline through response-body consumption, then clear timers and remove listeners on every completion path.
+Check status explicitly; fetch does not reject merely because HTTP status is an error. Empty/malformed/non-JSON error bodies remain HTTP failures. Actual HTTP status overrides body status. Copy only correctly typed field-error messages; unknown field keys never become DOM selectors. Programming exceptions propagate rather than being treated as ordinary HTTP failures.
 
-Catch cancellation only when an associated cancellation token is actually signaled. Track server deadlines separately from client disconnects so cancellation is not mistakenly converted to 500 or always called a timeout. ASP.NET Core timeout middleware can also signal `RequestAborted`; coordinate exception handling with the chosen middleware.
+POST serializes only the three documented policy keys; it performs no simulation and no policy range validation. Server validation remains authoritative, and frontend validation belongs to the form owner. Do not silently fill missing request fields with zero.
 
-Do not require a JSON cancellation response, invent a public 499 response, or add a cancellation endpoint for this synchronous API. If headers/body have started, the backend may be unable to replace the response with a problem document.
+## Deliberate minimum limits
 
-Browser abort is not rollback. Future writes may finish after cancellation or a network failure; their outcome is unknown until reconciled with the server. A cancelled QUERY must not save a scenario or create a persistent job.
+Successful health requires `status: 'ok'`; config requires object containers `inputs` and `statusQuoPolicy`; simulation requires object containers `policy`, `baseline`, `proposed`, and `changes`. This is a basic envelope check, not full schema validation or numerical correctness verification. Detailed response types and conservation/rounding rules remain in the API draft for the backend and later contract checks.
 
-Frontend state transitions: `idle → loading → success | error | cancelled`. Use an active request ID in addition to aborting to guard stale completions, including clearing the loading state. Keep the last successful result visible and labeled as belonging to its original inputs until the new request succeeds.
+The client passes caller AbortSignal through fetch and body reading, recognizes already-aborted signals, and distinguishes aborts from network failures. It creates no controller/timer of its own. Automatic deadlines, composed abort causes, deep response validation, config caching/fallback exports, trace metadata, and fixture-specific behavior are deferred. The previous implementations are saved in the local deferred-source draft, not required by this commit.
 
-## Client response parsing and retries
+When UI wiring resumes, track a request ID, ignore stale success/error/finally callbacks, preserve previous results with their applied inputs, and recover readiness after reset or cached navigation. These are application responsibilities, not features currently implemented in the restored frontend.
 
-- Inspect HTTP status explicitly; receiving a non-2xx response is not a fetch network rejection.
-- For successful endpoints above, require valid JSON matching the expected shape. Empty bodies, unexpected 204 responses, malformed JSON, or missing required fields become `invalidResponse`.
-- Future endpoints explicitly returning 204 should use `ApiResult<void>` and skip JSON parsing.
-- Treat body-read connection failures as network failures; treat explicit local cancellation/deadlines according to their recorded cause. A JSON syntax/schema failure is an invalid response.
-- A browser-level failure cannot reliably distinguish offline status, DNS, TLS, and blocked CORS. Show a general connectivity message; investigate browser/server logs.
-- Start with manual retries only. If automatic retries are added, restrict them to safe GET/QUERY operations, use bounded attempts/backoff, honor cancellation and valid `Retry-After`, and do not retry validation, permission, cancellation, or schema failures.
-- Parse `Retry-After` as seconds or an HTTP date; ignore malformed values. Expose it across origins if the UI reads it. Expose `Location` too if future creation flows need it.
-- Send `Accept: application/json, application/problem+json`. Use `Cache-Control: no-store` for initial simulation responses until deliberate caching is designed.
+## Verification
 
-## Optional saved scenario interfaces
+Run with Node 24 or newer from the repo root, without npm install or a backend:
 
-Only implement if persistence is requested. No client-supplied result is authoritative; the backend computes or verifies the saved result.
-
-```ts
-export interface SaveScenarioRequest {
-  name: string;
-  policy: SimulationRequest;
-}
-export interface SavedScenario {
-  id: string;
-  name: string;
-  createdAt: string;
-  result: SimulationResponse;
-}
-export interface PageRequest { page?: number; pageSize?: number }
-export interface Page<T> {
-  items: T[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-}
-export interface SavedScenarioApi {
-  saveScenario(request: SaveScenarioRequest,
-    options?: RequestOptions): Promise<ApiResult<SavedScenario>>;
-  getScenario(id: string,
-    options?: RequestOptions): Promise<ApiResult<SavedScenario>>;
-  listScenarios(page?: PageRequest,
-    options?: RequestOptions): Promise<ApiResult<Page<SavedScenario>>>;
-}
+```powershell
+node --test frontend/tests/api.test.js
 ```
 
-Backend counterparts: `SaveScenarioAsync(SaveScenarioRequest, CancellationToken)`, `GetScenarioAsync(string id, CancellationToken)`, and `ListScenariosAsync(int page, int pageSize, CancellationToken)`, returning `Task<ActionResult<...>>` with matching DTOs. Use POST `/api/scenarios` (201), GET `/api/scenarios/{id}` (200/404), and GET `/api/scenarios` (200). Validate names and enforce any ownership rules on the server. Pagination defaults: page 1, size 20, maximum 100; reject invalid values with 400 and use stable ordering.
-
-Saved-scenario contracts above remain future proposals, not outputs supported by the simulator. Household search is outside the current aggregate model. No update/delete/job endpoints are needed for the current MVP.
-
-## Verification when implementation starts
-
-Check matching wire formats and three required numeric fields; negative gas adjustments on either side of the exclusive gas-price bound; zero fare/rebate; extrapolation warning above 5 but not at 5; finite result shares and percentage-point differences; HTTP errors with JSON/HTML/empty bodies; malformed success bodies; cancellation before send and during body reads; stale request races; and QUERY through the deployed browser/proxy path. Verify adapter cancellation between calls without claiming mid-call interruption. Check safe failures for numerical overflow and unexpected exceptions. Timeout durations remain an API policy decision, not a model capability.
-
-## References
-
-- [HTTP QUERY semantics](https://www.rfc-editor.org/rfc/rfc10008.html)
-- [Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457.html)
-- [Browser AbortSignal behavior](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal)
-- [ASP.NET Core request timeout behavior](https://learn.microsoft.com/en-us/aspnet/core/performance/timeouts?view=aspnetcore-10.0)
+Tests cover POST route/key filtering, GET paths, field/form error mapping, malformed HTTP failures, invalid success envelopes, caller abort before sending and during body reading, network failures, and programming exceptions. Later integration must verify the full response schema, form mapping, stale requests, CORS, model behavior, and browser flow against the real backend.
