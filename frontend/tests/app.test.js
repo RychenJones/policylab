@@ -95,6 +95,7 @@ test('real form converts seven values and reveals the result before Chart.js mea
   p.calls[0].resolve(output); await pending;
   assert.equal(p.get('#results-content').hidden, false); assert.equal(p.get('#loading-state').hidden, true);
   assert.equal(p.get('#error-state').hidden, true); assert.equal(p.get('#results-panel').attributes['aria-busy'], 'false');
+  assert.equal(p.get('#result-status').textContent, 'Simulation complete · 5-year estimate');
   assert.equal(p.get('#results-table-body').children.length, 3); assert.equal(p.charts[0].resizeCount, 1); assert.equal(p.charts[0].updateCount, 1);
 });
 

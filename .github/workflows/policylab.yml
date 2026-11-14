@@ -1,0 +1,117 @@
+name: PolicyLab CI and deployment
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: policylab-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Build production image
+        run: docker build -t policylab:check .
+      - name: Check deployment helpers
+        run: python3 -m unittest discover -s deployment/tests -v
+      - name: Run tests against production image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name policylab-check -p 127.0.0.1:5080:8080 \
+            --read-only --tmpfs /tmp:size=64m,mode=1777 --cap-drop ALL \
+            --security-opt no-new-privileges:true --memory 1g --cpus 2 --pids-limit 256 policylab:check
+          trap 'docker logs policylab-check; docker rm -f policylab-check >/dev/null' EXIT
+          ready=false
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:5080/api/health | jq -e '.status == "ok"' >/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          API_TEST_URL=http://127.0.0.1:5080 node --test frontend/tests/*.test.js
+          API_TEST_URL=http://127.0.0.1:5080 node --test deployment/tests/image.test.mjs
+  publish:
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        id: image
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/rychenjones/policylab:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/RychenJones/policylab
+            org.opencontainers.image.revision=${{ github.sha }}
+  deploy:
+    needs: publish
+    if: vars.ENABLE_POLICYLAB_DEPLOYMENT == 'true' && github.ref == 'refs/heads/main'
+    environment: policylab-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Skip superseded release
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$current" = "$GITHUB_SHA" ]; then echo 'deploy=true' >> "$GITHUB_OUTPUT"; fi
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          oauth-client-id: ${{ secrets.TS_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:policylab-ci
+          ping: 100.92.60.55
+      - name: Deploy immutable image
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          umask 077
+          key="$RUNNER_TEMP/policylab-key"
+          hosts="$RUNNER_TEMP/policylab-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$hosts"
+          ssh -F /dev/null -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+            deploy@100.92.60.55 "deploy $DIGEST $GITHUB_SHA"

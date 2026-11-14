@@ -150,7 +150,7 @@ function renderResults(values, result) {
     chart.resize(); chart.update();
   }
   downloadChartButton.disabled = !chart;
-  resultStatus.textContent = `Simulation complete · ${simulatedYears}-year estimate`;
+  resultStatus.textContent = `Simulation complete · ${values.simulatedYears}-year estimate`;
 }
 
 function setFormValues(request) {

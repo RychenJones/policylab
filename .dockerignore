@@ -1,0 +1,13 @@
+.git
+.github
+**/bin
+**/obj
+**/node_modules
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+docs
+deployment
+**/__pycache__
+DEPLOYMENT-SETUP.md
