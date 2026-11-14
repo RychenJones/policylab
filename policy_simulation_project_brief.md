@@ -4,7 +4,7 @@
 
 We are building a hackathon MVP that simulates how proposed legislation could affect a population of 5,000 households.
 
-A legislator enters policy changes—such as increasing the gas tax—and the simulator estimates how households might respond. For example, some households may switch to electric vehicles or use public transportation more often.
+A legislator enters policy changes—such as increasing the gas tax—and the simulator estimates how households might respond. Each household chooses one of three mutually exclusive outcomes: keep its gas-powered vehicle, switch fully to an electric vehicle, or lose the car.
 
 The goal is to create a simple, understandable policy-testing tool that helps users explore potential consequences before implementing legislation.
 
@@ -18,12 +18,12 @@ The first version should include:
 2. Allow the user to configure three policy variables:
    - Electric vehicle rebate
    - Gas tax
-   - Public transportation cost
+   - Public transportation cost, which affects the lose-the-car decision
 3. Run the simulation.
 4. Estimate household responses, including:
-   - Continuing to drive a gas-powered vehicle
-   - Switching to an electric vehicle
-   - Switching partially or fully to public transportation
+   - Keeping a gas-powered vehicle
+   - Switching fully to an electric vehicle
+   - Losing the car
 5. Display results through simple charts and summary statistics.
 
 ## Example simulation flow
@@ -32,7 +32,7 @@ A legislator sets:
 
 - Gas tax: `$1.00 per gallon`
 - EV rebate: `$7,500`
-- Public transportation cost: `$2.50 per ride`
+- Public transportation cost: `$2.50 per ride` (affects the lose-the-car decision)
 
 The simulation then:
 
@@ -40,8 +40,8 @@ The simulation then:
 2. Calculates the transportation cost impact on each household.
 3. Determines whether each household is likely to:
    - Keep using a gas-powered vehicle
-   - Purchase or switch to an EV
-   - Use public transportation
+   - Switch fully to an EV
+   - Lose the car
 4. Summarizes the population-level results.
 5. Displays the effects in charts and readable explanations.
 
@@ -61,13 +61,13 @@ For example:
 
 ```text
 If increased annual gas costs exceed a household's transportation budget,
-the household becomes more likely to switch behavior.
+the household becomes more likely to switch fully to an EV or lose the car.
 
 If the EV rebate reduces the estimated EV purchase cost below the household's
-affordability threshold, the household becomes more likely to switch to an EV.
+affordability threshold, the household becomes more likely to switch fully to an EV.
 
-If public transportation is affordable and available, the household becomes
-more likely to use public transportation.
+If the cost of transportation alternatives is affordable and available, the
+household becomes more likely to lose the car.
 ```
 
 ## Team structure
@@ -96,7 +96,7 @@ Suggested output fields:
 
 - Number of households remaining with gas vehicles
 - Number switching to EVs
-- Number switching to public transportation
+- Number that lose the car
 - Average household cost change
 - Total estimated emissions change
 
@@ -108,7 +108,7 @@ Responsibilities:
 - Add controls for:
   - Gas tax
   - EV rebate
-  - Public transportation cost
+  - Public transportation cost, which affects the lose-the-car decision
 - Add a “Run Simulation” button.
 - Validate input values.
 - Display loading, error, and completion states.
@@ -121,9 +121,9 @@ Responsibilities:
 - Build the results dashboard.
 - Display summary cards.
 - Create charts such as:
-  - Transportation behavior before and after policy
+  - The three transportation choices before and after policy
   - Average household cost change
-  - Public transportation adoption
+  - Households keeping gas vehicles, switching fully to EVs, or losing the car
   - Estimated emissions change
 - Make the output understandable to a nontechnical user.
 - Include a short explanation of the simulation assumptions.
@@ -168,7 +168,7 @@ The MVP is successful if a user can:
 1. Open the application.
 2. Enter values for the gas tax, EV rebate, and public transportation cost.
 3. Run a simulation of 5,000 households.
-4. See how many households change transportation behavior.
+4. See how many households fall into each of the three transportation choices.
 5. Understand the financial and environmental effects.
 6. Compare different policy scenarios.
 
@@ -179,7 +179,7 @@ If time allows, the team could add:
 - Side-by-side comparison of two policies
 - Adjustable population size
 - More detailed household demographics
-- Geographic differences in public transportation availability
+- Geographic differences in transportation alternative availability
 - Different vehicle prices and fuel efficiencies
 - Household-level drill-down
 - Confidence ranges or uncertainty estimates
@@ -199,9 +199,9 @@ We are building an MVP policy simulation tool that models 5,000 synthetic househ
 
 1. Electric vehicle rebate
 2. Gas tax
-3. Public transportation cost
+3. Public transportation cost, which affects the lose-the-car decision
 
-The simulator estimates how households respond to those policies. Possible responses include continuing to use a gas-powered vehicle, switching to an electric vehicle, or using public transportation.
+The simulator estimates how households respond to those policies. Each household has exactly one of three possible responses: keep using a gas-powered vehicle, switch fully to an electric vehicle, or lose the car.
 
 The first version should use randomized synthetic household data and a simple rule-based algorithm. It is an exploratory simulation, not a real-world prediction engine.
 
