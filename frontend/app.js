@@ -14,6 +14,10 @@ const errorStateDetail = document.querySelector('#error-state-detail');
 const downloadChartButton = document.querySelector('#download-chart');
 const retryButton = document.querySelector('#retry-button');
 const retryConnection = document.querySelector('#retry-connection');
+const finalTab = document.querySelector('#final-tab');
+const yearlyTab = document.querySelector('#yearly-tab');
+const finalPanel = document.querySelector('#final-panel');
+const yearlyPanel = document.querySelector('#yearly-panel');
 const numberFormatter = new Intl.NumberFormat('en-US');
 const controls = {
   baseGasShare: document.querySelector('#base-gas'), baseEvShare: document.querySelector('#base-ev'),
@@ -24,6 +28,16 @@ const controls = {
 let defaults, activeRequest, lastResult;
 let initializing = false;
 let requestId = 0;
+
+function activateTab(tabName) {
+  const showingYearly = tabName === 'yearly';
+  finalTab.classList.toggle('active', !showingYearly);
+  yearlyTab.classList.toggle('active', showingYearly);
+  finalTab.setAttribute('aria-selected', String(!showingYearly));
+  yearlyTab.setAttribute('aria-selected', String(showingYearly));
+  finalPanel.hidden = showingYearly;
+  yearlyPanel.hidden = !showingYearly;
+}
 const chart = typeof globalThis.Chart === 'function' ? new globalThis.Chart(document.querySelector('#behavior-chart'), {
   type: 'bar',
   data: { labels: ['Gas vehicle', 'EV', 'No car'], datasets: [
@@ -37,7 +51,23 @@ const chart = typeof globalThis.Chart === 'function' ? new globalThis.Chart(docu
     } } }
   }
 }) : null;
+const yearlyChart = typeof globalThis.Chart === 'function' ? new globalThis.Chart(document.querySelector('#yearly-chart'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'Gas vehicle', data: [], borderColor: '#2b7967', backgroundColor: '#2b7967', tension: .25, pointRadius: 4, pointHoverRadius: 6 },
+    { label: 'EV', data: [], borderColor: '#e59051', backgroundColor: '#e59051', tension: .25, pointRadius: 4, pointHoverRadius: 6 },
+    { label: 'No car', data: [], borderColor: '#7b9db8', backgroundColor: '#7b9db8', tension: .25, pointRadius: 4, pointHoverRadius: 6 }
+  ] },
+  options: { responsive: true, maintainAspectRatio: false,
+    scales: { y: { beginAtZero: true, max: 100, ticks: { callback: value => `${value}%` } }, x: { title: { display: true, text: 'Simulation year' } } },
+    plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: context => `${context.dataset.label}: ${context.raw.toFixed(3)}%` } } }
+  }
+}) : null;
 if (!chart) document.querySelector('.chart-wrap').hidden = true;
+if (!yearlyChart && typeof document.querySelectorAll === 'function') {
+  const chartWraps = document.querySelectorAll('.chart-wrap');
+  if (chartWraps[1]) chartWraps[1].hidden = true;
+}
 
 function setResultState(state, detail = '') {
   resultsPanel.dataset.state = state;
@@ -149,13 +179,22 @@ function renderResults(values, result) {
     chart.data.datasets[0].data = baseline; chart.data.datasets[1].data = policy;
     chart.resize(); chart.update();
   }
+  const yearlyData = Array.isArray(result.years) ? result.years : [];
+  if (yearlyChart && yearlyData.length > 0) {
+    yearlyChart.data.labels = yearlyData.map(snapshot => `Year ${snapshot.year}`);
+    yearlyChart.data.datasets[0].data = yearlyData.map(snapshot => snapshot.gasPct);
+    yearlyChart.data.datasets[1].data = yearlyData.map(snapshot => snapshot.evPct);
+    yearlyChart.data.datasets[2].data = yearlyData.map(snapshot => snapshot.noCarPct);
+    yearlyChart.resize(); yearlyChart.update();
+  }
   downloadChartButton.disabled = !chart;
-  resultStatus.textContent = `Simulation complete · ${simulatedYears}-year estimate`;
+  yearlyTab.disabled = yearlyData.length === 0;
+  resultStatus.textContent = `Simulation complete · ${values.simulatedYears}-year estimate`;
 }
 
 function setFormValues(request) {
   for (const [field, input] of Object.entries(controls)) {
-    if (request[field] === undefined) { input.value = ''; continue; }
+    if (request[field] === undefined) continue;
     input.value = field.startsWith('base') ? Number((request[field] * 100).toFixed(3)) : request[field];
   }
   setTotalStatus(readValues());
@@ -211,6 +250,8 @@ document.querySelector('#reset-button').addEventListener('click', () => {
   resultStatus.textContent = defaults ? 'Ready · Run a scenario to see results' : 'The simulator is not ready yet. Please try again.';
   if (!defaults && !initializing) setResultState('error', "We couldn't load the simulator. Please try again.");
   downloadChartButton.disabled = true;
+  yearlyTab.disabled = true;
+  activateTab('final');
   ready();
 });
 for (const input of Object.values(controls)) {
@@ -259,6 +300,8 @@ function retry() {
 }
 retryConnection.addEventListener('click', retry);
 retryButton.addEventListener('click', retry);
+finalTab.addEventListener('click', () => activateTab('final'));
+yearlyTab.addEventListener('click', () => { if (!yearlyTab.disabled) activateTab('yearly'); });
 downloadChartButton.addEventListener('click', () => {
   if (!chart || !lastResult) return;
   const link = document.createElement('a');
@@ -267,5 +310,7 @@ downloadChartButton.addEventListener('click', () => {
   link.click();
 });
 downloadChartButton.disabled = true;
+yearlyTab.disabled = true;
+activateTab('final');
 setResultState('empty');
 initialize();
