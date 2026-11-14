@@ -45,8 +45,11 @@ public static class WebHost
         app.MapGet("/api/config", () => Results.Json(new
         {
             defaults = ApiBoundary.Defaults, inputs = ApiBoundary.Inputs,
+            cohorts = Simulator.Cfg.Cohorts,
             assumptions = new[] {
                 "Deterministic aggregate model; exploratory estimates, not forecasts.",
+                "Results are simulated independently for four household-income cohorts and combined using their population shares.",
+                "Income cohorts use 2024 ACS household-income bands aggregated to under $50k, $50k-$100k, $100k-$150k, and $150k+.",
                 "Starting shares are fractions and must sum to 1. Each category must be at least 0.001% for calibration.",
                 "The model returns gas, EV, and no-car percentages. No individual households are simulated.",
                 "Any displayed household counts are equivalent shares of 5,000, not observed switching households."

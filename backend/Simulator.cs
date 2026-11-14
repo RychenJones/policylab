@@ -100,29 +100,87 @@ public static class Simulator
                                   CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var calibrated = Calibrate(cfg);
-        var state = new State(cfg.BaseShare);
-        var yearlySnapshots = new List<YearSnapshot>(simulatedYears);
-
-        // Apply the same policy inputs once for each simulated year.
-        for (int year = 0; year < simulatedYears; year++)
+        ValidateCohorts(cfg.Cohorts);
+        var cohorts = ReconcileAggregateBaseline(cfg);
+        var cohortResults = new List<CohortResult>(cohorts.Count);
+        foreach (var cohort in cohorts)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            state = Step(cfg, calibrated, state, gasTax, evRebate, transitFare);
-            yearlySnapshots.Add(new YearSnapshot(
-                Year: year + 1,
-                GasPct: 100 * state.Mode.Gas,
-                EvPct: 100 * state.Mode.Ev,
-                NoCarPct: 100 * state.Mode.NoCar));
+            var cohortConfig = cfg.ForCohort(cohort);
+            var calibrated = Calibrate(cohortConfig);
+            var state = new State(cohortConfig.BaseShare);
+            var yearlySnapshots = new List<YearSnapshot>(simulatedYears);
+            for (int year = 0; year < simulatedYears; year++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                state = Step(cohortConfig, calibrated, state, gasTax, evRebate, transitFare);
+                yearlySnapshots.Add(new YearSnapshot(year + 1, 100 * state.Mode.Gas,
+                    100 * state.Mode.Ev, 100 * state.Mode.NoCar));
+            }
+
+            var final = yearlySnapshots[^1];
+            cohortResults.Add(new CohortResult(cohort.Id, cohort.Label,
+                100 * cohort.PopulationShare, final.GasPct, final.EvPct, final.NoCarPct,
+                yearlySnapshots));
         }
 
-        return new Result(
-            GasPct: 100 * state.Mode.Gas,
-            EvPct: 100 * state.Mode.Ev,
-            NoCarPct: 100 * state.Mode.NoCar)
+        var collectiveYears = Enumerable.Range(0, simulatedYears)
+            .Select(year => WeightedSnapshot(cohorts, cohortResults, year)).ToArray();
+        var collective = collectiveYears[^1];
+
+        return new Result(collective.GasPct, collective.EvPct, collective.NoCarPct)
         {
-            Years = yearlySnapshots
+            Years = collectiveYears,
+            Cohorts = cohortResults
         };
+    }
+
+    private static YearSnapshot WeightedSnapshot(IReadOnlyList<CohortConfig> configs,
+        IReadOnlyList<CohortResult> results, int year)
+    {
+        double gas = 0, ev = 0, noCar = 0;
+        for (int i = 0; i < configs.Count; i++)
+        {
+            var snapshot = results[i].Years[year];
+            gas += configs[i].PopulationShare * snapshot.GasPct;
+            ev += configs[i].PopulationShare * snapshot.EvPct;
+            noCar += configs[i].PopulationShare * snapshot.NoCarPct;
+        }
+        return new YearSnapshot(year + 1, gas, ev, noCar);
+    }
+
+    private static void ValidateCohorts(IReadOnlyList<CohortConfig> cohorts)
+    {
+        if (cohorts.Count == 0 || cohorts.Any(c => c.PopulationShare <= 0 ||
+            c.BaseShare.Gas <= 0 || c.BaseShare.Ev <= 0 || c.BaseShare.NoCar <= 0) ||
+            Math.Abs(cohorts.Sum(c => c.PopulationShare) - 1) > 1e-8 ||
+            cohorts.Any(c => Math.Abs(c.BaseShare.Gas + c.BaseShare.Ev + c.BaseShare.NoCar - 1) > 1e-8))
+            throw new InvalidOperationException("Cohort configuration is invalid.");
+    }
+
+    // Preserve the public aggregate starting-share input while retaining the
+    // relative income differences in the cohort baselines. Each mode is
+    // scaled by the requested aggregate share, so weighted cohort shares
+    // reproduce it exactly and remain positive for valid aggregate inputs.
+    private static IReadOnlyList<CohortConfig> ReconcileAggregateBaseline(Config cfg)
+    {
+        double gas = cfg.Cohorts.Sum(c => c.PopulationShare * c.BaseShare.Gas);
+        double ev = cfg.Cohorts.Sum(c => c.PopulationShare * c.BaseShare.Ev);
+        double noCar = cfg.Cohorts.Sum(c => c.PopulationShare * c.BaseShare.NoCar);
+        if (Math.Abs(gas - cfg.BaseShare.Gas) <= 1e-8 &&
+            Math.Abs(ev - cfg.BaseShare.Ev) <= 1e-8 &&
+            Math.Abs(noCar - cfg.BaseShare.NoCar) <= 1e-8)
+            return cfg.Cohorts;
+
+        var shifted = cfg.Cohorts.Select(c => c with
+        {
+            BaseShare = new Mode(
+                c.BaseShare.Gas + cfg.BaseShare.Gas - gas,
+                c.BaseShare.Ev + cfg.BaseShare.Ev - ev,
+                c.BaseShare.NoCar + cfg.BaseShare.NoCar - noCar)
+        }).ToArray();
+        return shifted.All(c => c.BaseShare.Gas > 0 && c.BaseShare.Ev > 0 && c.BaseShare.NoCar > 0)
+            ? shifted
+            : cfg.Cohorts.Select(c => c with { BaseShare = cfg.BaseShare }).ToArray();
     }
 
     // Returns the percentage-point change compared with the no-policy baseline.

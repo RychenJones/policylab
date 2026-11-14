@@ -24,4 +24,42 @@ public sealed record Config
     public double EFare { get; init; } = -0.35;
     public double EFuel { get; init; } = -0.30 * 0.15;
     public double BetaRebate { get; init; } = 5e-5;
+
+    // National household-income cohorts. Population shares are based on the
+    // 2024 ACS B19001 distribution, aggregated to the four UI bands. The
+    // transport starting shares and behavioral factors are intentionally
+    // explicit so they can be replaced by a newer survey extract later.
+    public IReadOnlyList<CohortConfig> Cohorts { get; init; } = DefaultCohorts;
+
+    private static IReadOnlyList<CohortConfig> DefaultCohorts =>
+    [
+        new("under-50k", "Under $50k", 0.28, 25_000,
+            new Mode(0.896, 0.005, 0.099), 10_800, 1.05, 1.05, 1.25),
+        new("50k-100k", "$50k–$100k", 0.31, 75_000,
+            new Mode(0.889, 0.010, 0.101), 12_000, 1.00, 1.00, 1.00),
+        new("100k-150k", "$100k–$150k", 0.21, 125_000,
+            new Mode(0.883, 0.020, 0.097), 12_800, 0.95, 0.95, 0.85),
+        new("150k-plus", "$150k+", 0.20, 200_000,
+            new Mode(0.8701, 0.0469, 0.083), 13_500, 0.90, 0.90, 0.70)
+    ];
+
+    public Config ForCohort(CohortConfig cohort) => this with
+    {
+        BaseShare = cohort.BaseShare,
+        MilesPerYear = cohort.MilesPerYear,
+        EFare = EFare * cohort.FareSensitivity,
+        EFuel = EFuel * cohort.FuelSensitivity,
+        BetaRebate = BetaRebate * cohort.RebateSensitivity
+    };
 }
+
+public sealed record CohortConfig(
+    string Id,
+    string Label,
+    double PopulationShare,
+    double RepresentativeIncome,
+    Mode BaseShare,
+    double MilesPerYear,
+    double FuelSensitivity,
+    double FareSensitivity,
+    double RebateSensitivity);
