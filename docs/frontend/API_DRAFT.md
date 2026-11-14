@@ -4,6 +4,8 @@ Status: proposed API contract aligned with the current `TransportPolicy` simulat
 
 Frontend language: plain JavaScript. React remains optional. TypeScript in companion drafts is contract notation only.
 
+The current frontend uses plain JavaScript DOM handlers. See [Frontend API Integration Draft](FRONTEND_INTEGRATION_DRAFT.md) for the existing form, renderer, and status connection points. Local JavaScript simulation formulas and fixtures do not define this API contract.
+
 See [API Functions and Failure Handling Draft](API_FUNCTIONS_DRAFT.md) for matching frontend/backend signatures, proposed DTOs, rejection responses, and cancellation behavior.
 
 ## Shared rules

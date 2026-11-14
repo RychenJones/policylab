@@ -6,6 +6,8 @@ Frontend language decision: use plain JavaScript. React remains optional; it doe
 
 ## Frontend contracts
 
+For wiring to the current plain JavaScript page, follow [Frontend API Integration Draft](FRONTEND_INTEGRATION_DRAFT.md). Retain the form/DOM coordination points and adapt the result renderers; replace the local mock simulation call with the API client. Do not reproduce mock household/cost/emissions/income fields in the API or treat fixtures as model evidence. No frontend framework migration is needed.
+
 These TypeScript declarations describe the shared JSON shapes and the client interface. Numbers must be finite. TypeScript types do not validate received JSON; the client must check required response fields at runtime.
 
 ```ts
