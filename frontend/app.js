@@ -34,6 +34,18 @@ const chart = typeof globalThis.Chart === 'function' ? new globalThis.Chart(docu
 }) : null;
 if (!chart) document.querySelector('.chart-wrap').hidden = true;
 
+function setResultState(state, detail = '') {
+  if (resultsPanel?.dataset) {
+    resultsPanel.dataset.state = state;
+    resultsPanel.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
+  }
+  if (emptyState) emptyState.hidden = state !== 'empty';
+  if (loadingState) loadingState.hidden = state !== 'loading';
+  if (errorState) errorState.hidden = state !== 'error';
+  if (resultsContent) resultsContent.hidden = !(state === 'success' || (state === 'error' && lastResult));
+  if (detail && errorStateDetail) errorStateDetail.textContent = detail;
+}
+
 function readValues() {
   return {
     baseGasPct: controls.baseGasShare.valueAsNumber, baseEvPct: controls.baseEvShare.valueAsNumber,
@@ -101,6 +113,7 @@ function renderResults(values, result) {
   });
   document.querySelector('#results-table-body').replaceChildren(...rows);
   document.querySelector('#result-inputs').textContent = `Results for starting shares ${baseline.map(value => value.toFixed(3)).join(' / ')}%; gas tax +$${values.gasTax}/gallon; rebate $${values.evRebate}; fare $${values.transitFare}/ride.`;
+  setResultState('success');
   document.querySelectorAll('[data-results]').forEach(element => { element.hidden = false; });
   resultStatus.textContent = `Simulation complete · ${simulatedYears}-year estimate`;
 }
@@ -126,6 +139,7 @@ form.addEventListener('submit', async event => {
   activeRequest = new AbortController();
   runButton.disabled = true; runButton.querySelector('span').textContent = 'Running…';
   resultStatus.textContent = lastResult ? 'Running simulation… Previous result remains below.' : 'Running simulation…';
+  setResultState('loading');
   try {
     const result = await requestSimulation(request, { signal: activeRequest.signal });
     if (id === requestId) renderResults(values, result);
@@ -135,12 +149,14 @@ form.addEventListener('submit', async event => {
     if (!(error instanceof ApiError)) console.error(error);
     showError(error instanceof ApiError ? error : new Error('The simulation could not be completed.'));
     resultStatus.textContent = lastResult ? 'Simulation failed · Showing previous result' : 'Simulation failed';
+    setResultState('error', 'Check the connection or input values and try again.');
   } finally { if (id === requestId) { activeRequest = undefined; ready(); } }
 });
 
 document.querySelector('#reset-button').addEventListener('click', () => {
   stopRequest(); clearErrors(); lastResult = undefined;
   if (defaults) setFormValues(defaults);
+  setResultState('empty');
   document.querySelectorAll('[data-results]').forEach(element => { element.hidden = true; });
   resultStatus.textContent = defaults ? 'Ready · Run a scenario to see results' : 'Connect to the backend to load defaults';
   ready();
@@ -167,7 +183,9 @@ async function initialize() {
     if (!(error instanceof ApiError)) console.error(error);
     showError(error instanceof ApiError ? error : new Error('Could not load API configuration.'));
     resultStatus.textContent = 'Backend connection unavailable'; retry.hidden = false;
+    setResultState('error', 'The backend configuration could not be loaded. Start the server and try again.');
   } finally { retry.disabled = false; ready(); }
 }
 document.querySelector('#retry-connection').addEventListener('click', initialize);
+setResultState('empty');
 initialize();

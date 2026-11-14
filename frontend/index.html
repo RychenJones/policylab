@@ -145,6 +145,14 @@
               </div>
             </fieldset>
             <p id="form-error" class="form-error" role="alert" hidden></p>
+            <button
+              id="retry-connection"
+              class="text-button"
+              type="button"
+              hidden
+            >
+              Retry connection
+            </button>
             <button id="run-button" class="primary-button" type="submit">
               <span>Run simulation</span
               ><span aria-hidden="true">→</span></button
@@ -196,7 +204,7 @@
               </button>
             </div>
           </article>
-          <div id="results-content" class="results-content" hidden>
+          <div id="results-content" class="results-content" data-results hidden>
             <article class="headline-card">
               <div class="headline-icon" aria-hidden="true">↗</div>
               <div>
@@ -225,6 +233,20 @@
                 Bars show percentages. Hover over a bar to see the estimated
                 household count.
               </p>
+            </article>
+            <article class="card results-table-card">
+              <div class="card-heading">
+                <div>
+                  <p class="section-kicker">Exact values</p>
+                  <h3>Outcome comparison</h3>
+                </div>
+              </div>
+              <table class="results-table">
+                <caption class="sr-only">Starting and policy transportation shares</caption>
+                <thead><tr><th scope="col">Outcome</th><th scope="col">Starting</th><th scope="col">Policy result</th></tr></thead>
+                <tbody id="results-table-body"></tbody>
+              </table>
+              <p id="result-inputs" class="chart-footnote"></p>
             </article>
             <div class="metric-grid">
               <article class="metric-card">
