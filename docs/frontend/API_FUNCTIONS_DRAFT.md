@@ -142,7 +142,7 @@ public sealed record PolicyInputRules(
     NumericInputRule EvRebateUsd,
     NumericInputRule PublicTransitFareUsdPerRide);
 public sealed record SimulationConfig(
-    double BaseGasPriceUsdPerGallon, int HorizonYears,
+    double BaseGasPriceUsdPerGallon, int SimulatedYears,
     double GasTaxWarningAbsThresholdUsdPerGallon,
     PolicyInputRules Inputs, IReadOnlyList<string> Assumptions);
 
@@ -158,7 +158,7 @@ public sealed record PercentagePointChanges(
     double GasPct, double EvPct, double OtherPct);
 public sealed record SimulationWarning(string Code, string Field, string Message);
 public sealed record SimulationResponse(
-    SimulationRequest AppliedPolicy, int HorizonYears,
+    SimulationRequest AppliedPolicy, int SimulatedYears,
     TravelShares Baseline, TravelShares Policy,
     PercentagePointChanges ChangePercentagePoints,
     IReadOnlyList<SimulationWarning> Warnings);

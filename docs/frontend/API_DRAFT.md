@@ -48,7 +48,7 @@ Read defaults from configuration rather than hard-coding them in the UI. The low
 Proposed wrapper fields supported by the current model:
 
 - `appliedPolicy`: the three request values.
-- `horizonYears`: `Cfg.HorizonYears`, currently 5; not a request parameter.
+- `simulatedYears`: `Cfg.SimulatedYears`, currently 5; not a request parameter.
 - `baseline`: `Simulate(0, 0, Cfg.BaseFare)`.
 - `policy`: `Simulate(gasTax, evRebate, transitFare)`.
 - `changePercentagePoints`: policy minus baseline, matching `PolicyEffect`.
