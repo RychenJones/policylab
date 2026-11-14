@@ -4,7 +4,7 @@
 
 We are building a hackathon MVP that simulates how proposed legislation could affect a population of 5,000 households.
 
-A legislator enters policy changes—such as increasing the gas tax—and the simulator estimates how households might respond. For example, some households may switch to electric vehicles, reduce driving, or use public transportation more often.
+A legislator enters policy changes—such as increasing the gas tax—and the simulator estimates how households might respond. For example, some households may switch to electric vehicles or use public transportation more often.
 
 The goal is to create a simple, understandable policy-testing tool that helps users explore potential consequences before implementing legislation.
 
@@ -15,25 +15,16 @@ This is an exploratory simulation, not a prediction engine. Its results should b
 The first version should include:
 
 1. Generate or load 5,000 simulated households.
-2. Assign each household randomized characteristics, such as:
-   - Annual income
-   - Number of household members
-   - Number of vehicles
-   - Current vehicle type
-   - Annual miles driven
-   - Sensitivity to transportation costs
-   - Ability or willingness to switch transportation methods
-3. Allow the user to configure three policy variables:
+2. Allow the user to configure three policy variables:
    - Electric vehicle rebate
    - Gas tax
    - Public transportation cost
-4. Run the simulation.
-5. Estimate household responses, including:
+3. Run the simulation.
+4. Estimate household responses, including:
    - Continuing to drive a gas-powered vehicle
    - Switching to an electric vehicle
-   - Reducing vehicle usage
    - Switching partially or fully to public transportation
-6. Display results through simple charts and summary statistics.
+5. Display results through simple charts and summary statistics.
 
 ## Example simulation flow
 
@@ -51,7 +42,6 @@ The simulation then:
    - Keep using a gas-powered vehicle
    - Purchase or switch to an EV
    - Use public transportation
-   - Reduce driving
 4. Summarizes the population-level results.
 5. Displays the effects in charts and readable explanations.
 
@@ -88,7 +78,7 @@ Responsibilities:
 
 - Define the household data model.
 - Generate 5,000 synthetic households.
-- Create randomized demographic and transportation variables.
+- Generate synthetic household data for the simulation.
 - Ensure generated data is realistic enough for the simulation.
 - Provide sample data for frontend development.
 
@@ -107,10 +97,8 @@ Suggested output fields:
 - Number of households remaining with gas vehicles
 - Number switching to EVs
 - Number switching to public transportation
-- Number reducing driving
 - Average household cost change
 - Total estimated emissions change
-- Results grouped by income level
 
 ### Frontend Developer 1: Policy input interface
 
@@ -134,7 +122,6 @@ Responsibilities:
 - Display summary cards.
 - Create charts such as:
   - Transportation behavior before and after policy
-  - EV adoption by income group
   - Average household cost change
   - Public transportation adoption
   - Estimated emissions change
@@ -214,21 +201,14 @@ We are building an MVP policy simulation tool that models 5,000 synthetic househ
 2. Gas tax
 3. Public transportation cost
 
-The simulator estimates how households respond to those policies. Possible responses include continuing to use a gas-powered vehicle, switching to an electric vehicle, reducing driving, or using public transportation.
+The simulator estimates how households respond to those policies. Possible responses include continuing to use a gas-powered vehicle, switching to an electric vehicle, or using public transportation.
 
 The first version should use randomized synthetic household data and a simple rule-based algorithm. It is an exploratory simulation, not a real-world prediction engine.
 
 Household variables may include:
 
-- Annual income
-- Number of household members
-- Number of vehicles
-- Current vehicle type
-- Annual miles driven
 - Fuel usage
 - Transportation budget
-- Sensitivity to cost changes
-- Ability to switch to public transportation
 - Likelihood of purchasing an EV
 
 The application needs:
