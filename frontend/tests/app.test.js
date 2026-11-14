@@ -5,7 +5,11 @@ import vm from 'node:vm';
 import { ApiError, INPUT_RULES, sanitizeRequest } from '../api.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8')
+const moduleSource = [
+  readFileSync(new URL('../js/charts.js', import.meta.url), 'utf8'),
+  readFileSync(new URL('../js/form.js', import.meta.url), 'utf8')
+].join('\n').replace(/export /g, '');
+const source = moduleSource + '\n' + readFileSync(new URL('../app.js', import.meta.url), 'utf8')
   .replace(/^import .*;\r?\n/, '').replace('export async function requestSimulation', 'async function requestSimulation');
 const defaults = { baseGasShare: 0.88592, baseEvShare: 0.01808, baseNoCarShare: 0.096, gasTax: 1, evRebate: 7500, transitFare: 1.75 };
 const output = { gasPct: 80, evPct: 10, noCarPct: 10 };

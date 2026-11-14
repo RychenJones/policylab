@@ -42,7 +42,18 @@ export function sanitizeResult(value) {
   if (!object(value) || keys.some(key => !Object.hasOwn(value, key) || !finite(value[key]) || value[key] < 0 || value[key] > 100)
     || Math.abs(keys.reduce((sum, key) => sum + value[key], 0) - 100) > 1e-6)
     throw new ApiError(200, 'The server returned invalid transportation percentages.', { code: 'invalid_response' });
-  return Object.fromEntries(keys.map(key => [key, value[key]]));
+  const years = value.years;
+  const validYears = Array.isArray(years) && years.length > 0 && years.every((snapshot, index) =>
+    object(snapshot)
+    && snapshot.year === index + 1
+    && keys.every(key => finite(snapshot[key]) && snapshot[key] >= 0 && snapshot[key] <= 100)
+    && Math.abs(keys.reduce((sum, key) => sum + snapshot[key], 0) - 100) <= 1e-6
+  );
+  if (!validYears)
+    throw new ApiError(200, 'The server returned invalid yearly transportation data.', { code: 'invalid_response' });
+  return { ...Object.fromEntries(keys.map(key => [key, value[key]])), years: years.map(snapshot => ({
+    year: snapshot.year, gasPct: snapshot.gasPct, evPct: snapshot.evPct, noCarPct: snapshot.noCarPct
+  })) };
 }
 
 function sanitizeConfig(value) {

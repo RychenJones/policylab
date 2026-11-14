@@ -67,6 +67,14 @@ public static class ApiBoundary
         double[] shares = [result.GasPct, result.EvPct, result.NoCarPct];
         if (shares.Any(value => !double.IsFinite(value) || value < 0 || value > 100) || Math.Abs(shares.Sum() - 100) > 1e-6)
             throw new InvalidOperationException("Simulation returned invalid shares.");
+        if (result.Cohorts.Count != config.Cohorts.Count || result.Years.Count != request.SimulatedYears ||
+            result.Cohorts.Any(cohort => cohort.Years.Count != request.SimulatedYears ||
+                new[] { cohort.GasPct, cohort.EvPct, cohort.NoCarPct }.Any(value => !double.IsFinite(value) || value < 0 || value > 100) ||
+                Math.Abs(cohort.GasPct + cohort.EvPct + cohort.NoCarPct - 100) > 1e-6 ||
+                new[] { cohort.Baseline.GasPct, cohort.Baseline.EvPct, cohort.Baseline.NoCarPct }
+                    .Any(value => !double.IsFinite(value) || value <= 0 || value > 100) ||
+                Math.Abs(cohort.Baseline.GasPct + cohort.Baseline.EvPct + cohort.Baseline.NoCarPct - 100) > 1e-6))
+            throw new InvalidOperationException("Simulation returned invalid cohort results.");
         // Return the final values plus the yearly snapshots. Never clamp,
         // normalize, fabricate household outcomes, or expose internal model objects.
         return result;
