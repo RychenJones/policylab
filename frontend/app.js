@@ -1,32 +1,27 @@
 const HOUSEHOLD_COUNT = 5000;
-
-const EXAMPLE_VALUES = {
-  baseGasPct: 88.592,
-  baseEvPct: 1.808,
-  baseNoCarPct: 10,
-  gasTax: 1,
-  evRebate: 7500,
-  transitFare: 1.75
-};
+const EXAMPLE_VALUES = { baseGasPct: 88.592, baseEvPct: 1.808, baseNoCarPct: 9.6, gasTax: 1, evRebate: 7500, transitFare: 1.75 };
 
 const form = document.querySelector('#simulation-form');
 const runButton = document.querySelector('#run-button');
 const errorMessage = document.querySelector('#form-error');
 const resultStatus = document.querySelector('#result-status');
+const resultsPanel = document.querySelector('#results-panel');
+const resultsContent = document.querySelector('#results-content');
+const emptyState = document.querySelector('#empty-state');
+const loadingState = document.querySelector('#loading-state');
+const errorState = document.querySelector('#error-state');
+const errorStateDetail = document.querySelector('#error-state-detail');
 const numberFormatter = new Intl.NumberFormat('en-US');
+let hasResults = false;
 
 const chart = new Chart(document.querySelector('#behavior-chart'), {
   type: 'bar',
-  data: {
-    labels: ['Gas vehicle', 'EV', 'No car'],
-    datasets: [
-      { label: 'Starting population', data: [0, 0, 0], backgroundColor: '#9bb9d1', borderRadius: 6, maxBarThickness: 46 },
-      { label: 'Policy result', data: [0, 0, 0], backgroundColor: '#2b7967', borderRadius: 6, maxBarThickness: 46 }
-    ]
-  },
+  data: { labels: ['Gas vehicle', 'EV', 'No car'], datasets: [
+    { label: 'Starting population', data: [0, 0, 0], backgroundColor: '#9bb9d1', borderRadius: 6, maxBarThickness: 46 },
+    { label: 'Policy result', data: [0, 0, 0], backgroundColor: '#2b7967', borderRadius: 6, maxBarThickness: 46 }
+  ] },
   options: {
-    responsive: true,
-    maintainAspectRatio: false,
+    responsive: true, maintainAspectRatio: false,
     scales: { y: { beginAtZero: true, max: 100, ticks: { callback: (value) => `${value}%` }, grid: { color: '#e7ece8' } }, x: { grid: { display: false } } },
     plugins: {
       legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, padding: 20 } },
@@ -35,14 +30,20 @@ const chart = new Chart(document.querySelector('#behavior-chart'), {
   }
 });
 
+function setResultState(state, detail = '') {
+  resultsPanel.dataset.state = state;
+  resultsPanel.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
+  emptyState.hidden = state !== 'empty';
+  loadingState.hidden = state !== 'loading';
+  errorState.hidden = state !== 'error';
+  resultsContent.hidden = !hasResults || (state === 'empty' || state === 'loading');
+  if (detail) errorStateDetail.textContent = detail;
+}
+
 function readValues() {
   return {
-    baseGasPct: Number(document.querySelector('#base-gas').value),
-    baseEvPct: Number(document.querySelector('#base-ev').value),
-    baseNoCarPct: Number(document.querySelector('#base-no-car').value),
-    gasTax: Number(document.querySelector('#gas-tax').value),
-    evRebate: Number(document.querySelector('#ev-rebate').value),
-    transitFare: Number(document.querySelector('#transit-fare').value)
+    baseGasPct: Number(document.querySelector('#base-gas').value), baseEvPct: Number(document.querySelector('#base-ev').value), baseNoCarPct: Number(document.querySelector('#base-no-car').value),
+    gasTax: Number(document.querySelector('#gas-tax').value), evRebate: Number(document.querySelector('#ev-rebate').value), transitFare: Number(document.querySelector('#transit-fare').value)
   };
 }
 
@@ -57,18 +58,10 @@ function validateValues(values) {
 }
 
 function buildBackendRequest(values) {
-  return {
-    baseGasShare: values.baseGasPct * 0.01,
-    baseEvShare: values.baseEvPct * 0.01,
-    baseNoCarShare: values.baseNoCarPct * 0.01,
-    gasTax: values.gasTax,
-    evRebate: values.evRebate,
-    transitFare: values.transitFare
-  };
+  return { baseGasShare: values.baseGasPct * 0.01, baseEvShare: values.baseEvPct * 0.01, baseNoCarShare: values.baseNoCarPct * 0.01, gasTax: values.gasTax, evRebate: values.evRebate, transitFare: values.transitFare };
 }
 
 // Temporary preview adapter. Replace only this function with the API call.
-// It receives fractions for baseline shares because that is the backend format.
 async function requestSimulation(request) {
   await new Promise((resolve) => setTimeout(resolve, 450));
   const taxEffect = request.gasTax * 2.2;
@@ -97,7 +90,6 @@ function renderResults(values, result) {
   const largestIndex = changes.reduce((best, value, index) => Math.abs(value) > Math.abs(changes[best]) ? index : best, 0);
   const largest = changes[largestIndex];
   const direction = largest < 0 ? 'decreased' : 'increased';
-
   chart.data.datasets[0].data = baseline;
   chart.data.datasets[1].data = policy;
   chart.update();
@@ -109,23 +101,20 @@ function renderResults(values, result) {
   document.querySelector('#gas-count').textContent = signedHouseholds(changes[0]);
   document.querySelector('#ev-count').textContent = signedHouseholds(changes[1]);
   document.querySelector('#no-car-count').textContent = signedHouseholds(changes[2]);
-  resultStatus.textContent = 'Preview result · API not connected';
+  resultStatus.textContent = 'Simulation complete';
+  hasResults = true;
+  setResultState('success');
 }
 
 function setFormValues(values) {
-  document.querySelector('#base-gas').value = values.baseGasPct;
-  document.querySelector('#base-ev').value = values.baseEvPct;
-  document.querySelector('#base-no-car').value = values.baseNoCarPct;
-  document.querySelector('#gas-tax').value = values.gasTax;
-  document.querySelector('#ev-rebate').value = values.evRebate;
-  document.querySelector('#transit-fare').value = values.transitFare;
+  document.querySelector('#base-gas').value = values.baseGasPct; document.querySelector('#base-ev').value = values.baseEvPct; document.querySelector('#base-no-car').value = values.baseNoCarPct;
+  document.querySelector('#gas-tax').value = values.gasTax; document.querySelector('#ev-rebate').value = values.evRebate; document.querySelector('#transit-fare').value = values.transitFare;
   setTotalStatus(values);
 }
 
 ['#base-gas', '#base-ev', '#base-no-car'].forEach((selector) => document.querySelector(selector).addEventListener('input', () => setTotalStatus(readValues())));
 
-form.addEventListener('submit', async (event) => {
-  event.preventDefault();
+async function submitSimulation() {
   const values = readValues();
   const validationError = validateValues(values);
   errorMessage.hidden = !validationError;
@@ -133,25 +122,23 @@ form.addEventListener('submit', async (event) => {
   if (validationError) return;
   runButton.disabled = true;
   runButton.querySelector('span').textContent = 'Running…';
-  resultStatus.textContent = 'Running preview…';
+  resultStatus.textContent = 'Running simulation…';
+  setResultState('loading');
   try {
     const result = await requestSimulation(buildBackendRequest(values));
     renderResults(values, result);
   } catch {
-    errorMessage.hidden = false;
-    errorMessage.textContent = 'The simulation could not be completed. Please try again.';
     resultStatus.textContent = 'Simulation failed';
+    setResultState('error', 'Check your connection and try again. Your previous results, if any, are still available below.');
   } finally {
     runButton.disabled = false;
     runButton.querySelector('span').textContent = 'Run simulation';
   }
-});
+}
 
-document.querySelector('#reset-button').addEventListener('click', () => {
-  setFormValues(EXAMPLE_VALUES);
-  errorMessage.hidden = true;
-  renderResults(EXAMPLE_VALUES, { gasPct: 72.4, evPct: 18.1, noCarPct: 9.5 });
-});
+form.addEventListener('submit', (event) => { event.preventDefault(); submitSimulation(); });
+document.querySelector('#retry-button').addEventListener('click', submitSimulation);
+document.querySelector('#reset-button').addEventListener('click', () => { setFormValues(EXAMPLE_VALUES); errorMessage.hidden = true; hasResults = false; resultStatus.textContent = 'Awaiting simulation'; setResultState('empty'); });
 
 setFormValues(EXAMPLE_VALUES);
-renderResults(EXAMPLE_VALUES, { gasPct: 72.4, evPct: 18.1, noCarPct: 9.5 });
+setResultState('empty');
