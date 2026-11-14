@@ -1,7 +1,9 @@
 name: policylab
 services:
   app:
-    image: ${POLICYLAB_IMAGE:?An immutable image is required}
+    build:
+      context: ..
+      dockerfile: Dockerfile
     container_name: policylab-app
     restart: unless-stopped
     ports:
