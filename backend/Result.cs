@@ -1,7 +1,12 @@
 namespace TransportPolicy;
 
+public sealed record YearSnapshot(int Year, double GasPct, double EvPct, double NoCarPct);
+
 public sealed record Result(double GasPct, double EvPct, double NoCarPct)
 {
+    // One snapshot for each simulated year, captured after that year's update.
+    public IReadOnlyList<YearSnapshot> Years { get; init; } = [];
+
     // Calculates the percentage-point change between two results.
     public static Result operator -(Result a, Result b) =>
         new(a.GasPct - b.GasPct, a.EvPct - b.EvPct, a.NoCarPct - b.NoCarPct);

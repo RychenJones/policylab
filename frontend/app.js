@@ -18,9 +18,10 @@ const numberFormatter = new Intl.NumberFormat('en-US');
 const controls = {
   baseGasShare: document.querySelector('#base-gas'), baseEvShare: document.querySelector('#base-ev'),
   baseNoCarShare: document.querySelector('#base-no-car'), gasTax: document.querySelector('#gas-tax'),
-  evRebate: document.querySelector('#ev-rebate'), transitFare: document.querySelector('#transit-fare')
+  evRebate: document.querySelector('#ev-rebate'), transitFare: document.querySelector('#transit-fare'),
+  simulatedYears: document.querySelector('#simulated-years')
 };
-let defaults, simulatedYears, activeRequest, lastResult;
+let defaults, activeRequest, lastResult;
 let initializing = false;
 let requestId = 0;
 const chart = typeof globalThis.Chart === 'function' ? new globalThis.Chart(document.querySelector('#behavior-chart'), {
@@ -52,13 +53,15 @@ function readValues() {
   return {
     baseGasPct: controls.baseGasShare.valueAsNumber, baseEvPct: controls.baseEvShare.valueAsNumber,
     baseNoCarPct: controls.baseNoCarShare.valueAsNumber, gasTax: controls.gasTax.valueAsNumber,
-    evRebate: controls.evRebate.valueAsNumber, transitFare: controls.transitFare.valueAsNumber
+    evRebate: controls.evRebate.valueAsNumber, transitFare: controls.transitFare.valueAsNumber,
+    simulatedYears: controls.simulatedYears.valueAsNumber
   };
 }
 
 function buildBackendRequest(values) {
   return { baseGasShare: values.baseGasPct / 100, baseEvShare: values.baseEvPct / 100,
-    baseNoCarShare: values.baseNoCarPct / 100, gasTax: values.gasTax, evRebate: values.evRebate, transitFare: values.transitFare };
+    baseNoCarShare: values.baseNoCarPct / 100, gasTax: values.gasTax, evRebate: values.evRebate,
+    transitFare: values.transitFare, simulatedYears: values.simulatedYears };
 }
 
 // The merged frontend's integration seam now always calls the real HTTP client.
@@ -151,7 +154,10 @@ function renderResults(values, result) {
 }
 
 function setFormValues(request) {
-  for (const [field, input] of Object.entries(controls)) input.value = field.startsWith('base') ? Number((request[field] * 100).toFixed(3)) : request[field];
+  for (const [field, input] of Object.entries(controls)) {
+    if (request[field] === undefined) { input.value = ''; continue; }
+    input.value = field.startsWith('base') ? Number((request[field] * 100).toFixed(3)) : request[field];
+  }
   setTotalStatus(readValues());
 }
 
@@ -166,7 +172,7 @@ function resultSummary() {
   if (!lastResult) return 'Ready · Run a scenario to see results';
   const current = readValues();
   return Object.keys(lastResult.values).some(key => current[key] !== lastResult.values[key])
-    ? 'Inputs changed · Run again to update the displayed result' : `Simulation complete · ${simulatedYears}-year estimate`;
+    ? 'Inputs changed · Run again to update the displayed result' : `Simulation complete · ${lastResult.values.simulatedYears}-year estimate`;
 }
 
 form.addEventListener('submit', async event => {
@@ -232,10 +238,11 @@ async function initialize() {
   ready(); resultStatus.textContent = 'Getting the simulator ready…';
   clearErrors();
   try {
-    const config = await getConfig(); defaults = config.defaults; simulatedYears = config.simulatedYears;
+    const config = await getConfig(); defaults = config.defaults;
     for (const [field, input] of Object.entries(controls)) {
       const factor = field.startsWith('base') ? 100 : 1;
       input.min = config.inputs[field].min * factor; input.max = config.inputs[field].max * factor;
+      input.step = config.inputs[field].step;
     }
     setFormValues(defaults); setResultState(lastResult ? 'success' : 'empty');
     resultStatus.textContent = resultSummary();

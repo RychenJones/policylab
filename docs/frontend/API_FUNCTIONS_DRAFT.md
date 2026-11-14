@@ -6,7 +6,7 @@ Rebuild reference for the implemented connection. [API_DRAFT.md](API_DRAFT.md) d
 
 | Function in frontend/api.js | Behavior |
 | --- | --- |
-| sanitizeRequest(request) | Validate six fields, types, bounds and sum; return a new whitelisted object or throw ApiError. |
+| sanitizeRequest(request) | Validate seven fields, types, bounds and sum; return a new whitelisted object or throw ApiError. |
 | sanitizeResult(value) | Validate gasPct/evPct/noCarPct ranges and sum; return exactly those fields or throw ApiError. |
 | getHealth(options?) | GET /api/health; return a validated health object. |
 | getConfig(options?) | GET /api/config; sanitize defaults/rules/metadata and reject server/client bound drift. |
@@ -22,7 +22,7 @@ ApiError extends Error with status, message, optional code, fieldErrors and form
 | Failure | Status/code | Caller responsibility |
 | --- | --- | --- |
 | Client-side validation | 400 / validation_failed | Correct field/form messages; no request sent. |
-| HTTP rejection | Actual status and optional server code | Map known six fields inline; other keys become formError. |
+| HTTP rejection | Actual status and optional server code | Map known seven fields inline; other keys become formError. |
 | Network/body-read transport failure | 0 / network_error | Connectivity message; preserve inputs/results. |
 | Caller abort | 0 / cancelled | Reset/navigation wins; no failure toast. |
 | Invalid successful response/config | Actual success status / invalid_response | Do not render; keep previous good output. |
