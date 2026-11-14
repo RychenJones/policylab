@@ -43,6 +43,13 @@ h2 { margin-bottom: 0; font-size: 24px; letter-spacing: -.04em; } h3 { margin-bo
 fieldset { margin: 27px 0 0; padding: 0 0 23px; border: 0; border-bottom: 1px solid var(--line); } legend { padding: 0; font-size: 13px; font-weight: 700; }
 .fieldset-help { margin: 4px 0 15px; color: var(--muted); font-size: 10px; }
 .input-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+.population-presets { margin: 0 0 18px; }
+.preset-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.preset-buttons { display: flex; gap: 6px; }
+.preset-button { flex: 1; padding: 8px 5px; border: 1px solid var(--line); border-radius: 7px; background: #f7f9f6; color: var(--muted); font-size: 11px; font-weight: 700; }
+.preset-button:hover { border-color: #a9c9bd; color: var(--green-dark); }
+.preset-button.active { border-color: var(--green); background: #eaf4ef; color: var(--green-dark); }
+.preset-note { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.35; }
 .input-row label, .field-group label { font-size: 12px; font-weight: 600; }
 .percent-input, .money-input { display: flex; height: 38px; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfa; color: var(--muted); font-size: 11px; }
 .percent-input input, .money-input input { width: 82px; border: 0; outline: 0; background: transparent; color: var(--ink); font-weight: 650; text-align: right; }
@@ -56,7 +63,8 @@ fieldset { margin: 27px 0 0; padding: 0 0 23px; border: 0; border-bottom: 1px so
 .primary-button:hover { background: var(--green-dark); transform: translateY(-1px); } .primary-button:disabled { cursor: wait; opacity: .7; }
 .text-button { display: block; margin: 12px auto 0; padding: 0; border: 0; background: transparent; color: var(--green); font-size: 11px; font-weight: 700; } .text-button:hover { color: var(--green-dark); text-decoration: underline; }
 .results-heading { margin: 4px 0 20px; align-items: flex-end; } .result-status { margin: 0 0 2px; color: var(--muted); font-size: 10px; }
-.chart-tabs { display: flex; align-items: flex-end; gap: 4px; margin: 0; padding: 0 0 0 12px; position: relative; z-index: 2; }
+.chart-tabs { display: flex; align-items: flex-end; gap: 4px; margin: 0; padding: 0 0 0 12px; position: relative; z-index: 2; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.chart-tabs::-webkit-scrollbar { display: none; }
 .tab-button { flex: 0 0 auto; margin-bottom: -1px; padding: 11px 21px 10px; border: 1px solid var(--line); border-bottom: 0; border-radius: 12px 12px 0 0; background: #e9efeb; color: var(--muted); font-size: 12px; font-weight: 700; }
 .tab-button:hover:not(:disabled):not(.active) { background: #f0f4f1; color: var(--green-dark); }
 .tab-button.active { position: relative; background: var(--card); color: var(--green-dark); }
@@ -67,7 +75,7 @@ fieldset { margin: 27px 0 0; padding: 0 0 23px; border: 0; border-bottom: 1px so
 .headline-card { display: flex; align-items: flex-start; gap: 15px; margin: 18px 0; padding: 23px; border: 1px solid #bcdccd; border-radius: 17px; background: #eaf4ef; }
 .headline-icon { display: grid; width: 39px; height: 39px; flex: 0 0 auto; place-items: center; border-radius: 11px; background: var(--green); color: white; font-size: 22px; font-weight: 700; }
 .headline-card h2 { margin-bottom: 5px; color: var(--green-dark); } .headline-card p:last-child { margin: 0; color: var(--muted); font-size: 12px; }
-.chart-card { padding: 24px 23px 18px; } .chart-wrap { position: relative; height: 360px; margin-top: 20px; } .chart-footnote { margin: 11px 0 0; color: var(--muted); font-size: 10px; }
+.chart-card { padding: 24px 23px 18px; margin: 18px 0;} .chart-wrap { position: relative; height: 360px; margin-top: 20px; } .chart-footnote { margin: 11px 0 0; color: var(--muted); font-size: 10px; }
 .results-table-card { margin-top: 18px; padding: 22px 23px 18px; box-shadow: none; }
 .results-table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 12px; }
 .results-table th, .results-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; }

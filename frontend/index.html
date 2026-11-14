@@ -50,6 +50,15 @@
             <fieldset>
               <legend>Starting population</legend>
               <p class="fieldset-help">These values must add up to 100%.</p>
+              <div class="population-presets" role="group" aria-label="Starting population presets">
+                <span class="preset-label">Use a starting profile</span>
+                <div class="preset-buttons">
+                  <button id="urban-preset" class="preset-button" type="button" data-preset="urban" aria-pressed="false">Urban</button>
+                  <button id="rural-preset" class="preset-button" type="button" data-preset="rural" aria-pressed="false">Rural</button>
+                  <button id="custom-preset" class="preset-button active" type="button" data-preset="custom" aria-pressed="true">Custom</button>
+                </div>
+                <p class="preset-note">Urban and rural profiles are exploratory U.S. demo estimates, not forecasts.</p>
+              </div>
               <div class="input-row">
                 <label for="base-gas">Gas vehicle</label>
                 <div class="percent-input">
@@ -97,7 +106,7 @@
             <fieldset>
               <legend>Policy values</legend>
               <div class="field-group">
-                <label for="gas-tax">Gas tax increase</label>
+                <label for="gas-tax">Gas tax</label>
                 <div class="money-input">
                   <span>$</span
                   ><input
@@ -176,15 +185,18 @@
           <div class="results-heading">
             <div>
               <p class="section-kicker">Step 2</p>
-              <h2>Population impact</h2>
+              <h2>Population impact by salary</h2>
             </div>
             <p id="result-status" class="result-status">Awaiting simulation</p>
           </div>
-          <div class="chart-tabs" role="tablist" aria-label="Simulation views">
-            <button id="final-tab" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="final-panel">Final outcome</button>
-            <button id="yearly-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="yearly-panel" disabled>Year by year</button>
+          <div class="chart-tabs" role="tablist" aria-label="Population views">
+            <button id="overall-tab" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="overall-panel" data-cohort="overall">Overall</button>
+            <button id="under-50k-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="overall-panel" data-cohort="under-50k" disabled>Under $50k</button>
+            <button id="50k-100k-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="overall-panel" data-cohort="50k-100k" disabled>$50k–$100k</button>
+            <button id="100k-150k-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="overall-panel" data-cohort="100k-150k" disabled>$100k–$150k</button>
+            <button id="150k-plus-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="overall-panel" data-cohort="150k-plus" disabled>$150k+</button>
           </div>
-          <div id="final-panel" class="tab-panel" role="tabpanel" aria-labelledby="final-tab">
+          <div id="overall-panel" class="tab-panel" role="tabpanel" aria-labelledby="overall-tab">
           <article id="empty-state" class="state-card empty-state">
             <div class="state-icon" aria-hidden="true">○</div>
             <div>
@@ -221,7 +233,7 @@
                   <p class="section-kicker">Household outcomes</p>
                   <h3>Starting population vs. policy result</h3>
                 </div>
-                <div class="chart-actions"><span class="chart-note">5,000 households</span><button id="download-chart" class="secondary-button" type="button" disabled>Download PNG</button></div>
+                <div class="chart-actions"><span id="population-note" class="chart-note">5,000 households</span><button id="download-chart" class="secondary-button" type="button" disabled>Download PNG</button></div>
               </div>
               <div class="chart-wrap">
                 <canvas
@@ -233,6 +245,11 @@
                 Bars show percentages. Hover over a bar to see the estimated
                 household count.
               </p>
+            </article>
+            <article class="card chart-card">
+              <div class="card-heading"><div><p class="section-kicker">Annual progression</p><h3>How the transportation mix changes</h3></div><span id="yearly-chart-note" class="chart-note">Percent of population</span></div>
+              <div class="chart-wrap"><canvas id="yearly-chart" aria-label="Line chart showing transportation shares by year"></canvas></div>
+              <p class="chart-footnote">Each point shows the model's estimated transportation mix after that year's update.</p>
             </article>
             <article class="headline-card">
               <div class="headline-icon" aria-hidden="true">↗</div>
@@ -265,7 +282,7 @@
                 ><span id="gas-count" class="metric-support">—</span>
               </article>
               <article class="metric-card">
-                <span class="metric-label">EV change</span
+                <span class="metric-label">Electric Vehicle change</span
                 ><strong id="ev-change">—</strong
                 ><span id="ev-count" class="metric-support">—</span>
               </article>
@@ -287,13 +304,6 @@
               </div>
             </article>
           </div>
-          </div>
-          <div id="yearly-panel" class="tab-panel yearly-panel" role="tabpanel" aria-labelledby="yearly-tab" hidden>
-            <article class="card chart-card">
-              <div class="card-heading"><div><p class="section-kicker">Annual progression</p><h3>How the transportation mix changes</h3></div><span class="chart-note">Percent of population</span></div>
-              <div class="chart-wrap"><canvas id="yearly-chart" aria-label="Line chart showing transportation shares by year"></canvas></div>
-              <p class="chart-footnote">Each point shows the model's estimated transportation mix after that year's update.</p>
-            </article>
           </div>
         </section>
       </section>

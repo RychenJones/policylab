@@ -12,7 +12,7 @@ const moduleSource = [
 const source = moduleSource + '\n' + readFileSync(new URL('../app.js', import.meta.url), 'utf8')
   .replace(/^import .*;\r?\n/, '').replace('export async function requestSimulation', 'async function requestSimulation');
 const defaults = { baseGasShare: 0.88592, baseEvShare: 0.01808, baseNoCarShare: 0.096, gasTax: 1, evRebate: 7500, transitFare: 1.75 };
-const output = { gasPct: 80, evPct: 10, noCarPct: 10 };
+const output = { gasPct: 80, evPct: 10, noCarPct: 10, years: [{ year: 1, gasPct: 82, evPct: 8, noCarPct: 10 }], cohorts: [{ id: 'under-50k', label: 'Under $50k', populationPct: 100, baseline: { gasPct: 88, evPct: 2, noCarPct: 10 }, gasPct: 80, evPct: 10, noCarPct: 10, years: [{ year: 1, gasPct: 82, evPct: 8, noCarPct: 10 }] }] };
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const attribute = (text, key) => text.match(new RegExp(`\\b${key}="([^"]*)"`))?.[1];
 
@@ -22,6 +22,7 @@ class Element {
     this.min = attribute(attributes, 'min') ?? ''; this.max = attribute(attributes, 'max') ?? '';
     this.hidden = /(?:^|\s)hidden(?:\s|$)/.test(attributes); this.disabled = /(?:^|\s)disabled(?:\s|$)/.test(attributes);
     this.textContent = ''; this.events = {}; this.labels = []; this.attributes = {}; this.children = []; this.dataset = {};
+    const cohort = attribute(attributes, 'data-cohort'); if (cohort) this.dataset.cohort = cohort;
     this.classes = new Set((attribute(attributes, 'class') ?? '').split(/\s+/));
     this.classList = { toggle: (name, enabled) => enabled ? this.classes.add(name) : this.classes.delete(name) };
   }
@@ -50,7 +51,7 @@ async function page({ configFailures = 0, chartAvailable = false } = {}) {
     elements.get(id).labels = [{ textContent: label.replace(/<[^>]+>/g, '').trim() }];
   const get = selector => selector.startsWith('#') ? elements.get(selector.slice(1)) ?? null
     : selector.startsWith('.') ? all.find(element => element.classes.has(selector.slice(1))) ?? null : null;
-  const document = { querySelector: get, createElement: tag => new Element(tag) };
+  const document = { querySelector: get, querySelectorAll: selector => selector === '[data-cohort]' ? all.filter(element => element.dataset.cohort) : [], createElement: tag => new Element(tag) };
   let configCalls = 0;
   class Chart {
     constructor(_canvas, options) { this.data = options.data; this.resizeCount = 0; this.updateCount = 0; charts.push(this); }
@@ -90,6 +91,17 @@ test('blank, zero-share, and incorrect-total inputs show user units and send not
   assert.match(p.get('#form-error').textContent, /0\.001%/); assert.doesNotMatch(p.get('#form-error').textContent, /finite|JSON|fraction|calibrat/i);
   p.get('#reset-button').fire('click'); p.get('#base-gas').value = '90'; await p.submit();
   assert.match(p.get('#form-error').textContent, /add up to 100%/); assert.equal(p.calls.length, 0);
+});
+
+test('population presets fill realistic demo values and manual edits return to custom', async () => {
+  const p = await page();
+  p.get('#urban-preset').fire('click');
+  assert.equal(p.get('#base-gas').value, '84.2'); assert.equal(p.get('#base-ev').value, '6.5'); assert.equal(p.get('#base-no-car').value, '9.3');
+  assert.equal(p.get('#urban-preset').attributes['aria-pressed'], 'true'); assert.equal(p.get('#custom-preset').attributes['aria-pressed'], 'false');
+  p.get('#base-gas').value = '80'; p.get('#base-gas').fire('input');
+  assert.equal(p.get('#custom-preset').attributes['aria-pressed'], 'true');
+  p.get('#rural-preset').fire('click');
+  assert.equal(p.get('#base-gas').value, '92.5'); assert.equal(p.get('#base-ev').value, '3.5'); assert.equal(p.get('#base-no-car').value, '4');
 });
 
 test('real form converts seven values and reveals the result before Chart.js measures it', async () => {
@@ -155,6 +167,6 @@ test('field errors use percentage labels and zero changes never render as negati
   const p = await page(); const first = p.submit();
   p.calls[0].reject(new ApiError(400, 'Bad JSON', { fieldErrors: { baseGasShare: ['0.00001 fraction is required'] } })); await first;
   assert.equal(p.get('#base-gas').attributes['aria-invalid'], 'true'); assert.doesNotMatch(p.get('#form-error').textContent, /JSON|fraction/);
-  const next = p.submit(); p.calls[1].resolve({ gasPct: 88.592 - 1e-12, evPct: 1.808, noCarPct: 9.6 + 1e-12 }); await next;
+  const next = p.submit(); p.calls[1].resolve({ ...output, gasPct: 88.592 - 1e-12, evPct: 1.808, noCarPct: 9.6 + 1e-12 }); await next;
   assert.equal(p.get('#gas-change').textContent, '0.0 pp'); assert.equal(p.get('#gas-count').textContent, '0 estimated households');
 });

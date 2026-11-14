@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import { ApiError, createApi, INPUT_RULES, sanitizeRequest, sanitizeResult } from '../api.js';
 
 const input = { baseGasShare: 0.88592, baseEvShare: 0.01808, baseNoCarShare: 0.096, gasTax: 1, evRebate: 7500, transitFare: 1.75, simulatedYears: 5 };
-const result = { gasPct: 80, evPct: 10, noCarPct: 10, years: [
+const cohort = { id: 'under-50k', label: 'Under $50k', populationPct: 100, baseline: { gasPct: 88, evPct: 2, noCarPct: 10 }, gasPct: 80, evPct: 10, noCarPct: 10, years: [
   { year: 1, gasPct: 82, evPct: 8, noCarPct: 10 },
   { year: 2, gasPct: 80, evPct: 10, noCarPct: 10 }
 ] };
+const result = { gasPct: 80, evPct: 10, noCarPct: 10, years: [
+  { year: 1, gasPct: 82, evPct: 8, noCarPct: 10 },
+  { year: 2, gasPct: 80, evPct: 10, noCarPct: 10 }
+] , cohorts: [cohort] };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
 test('requestSimulation sends exactly seven validated numeric fields to POST /api/simulate', async () => {

@@ -51,8 +51,41 @@ export function sanitizeResult(value) {
   );
   if (!validYears)
     throw new ApiError(200, 'The server returned invalid yearly transportation data.', { code: 'invalid_response' });
+  const cohorts = value.cohorts;
+  const validCohorts = Array.isArray(cohorts) && cohorts.length > 0
+    && new Set(cohorts.map(cohort => cohort?.id)).size === cohorts.length
+    && cohorts.every(cohort => finite(cohort?.populationPct) && cohort.populationPct > 0 && cohort.populationPct <= 100)
+    && Math.abs(cohorts.reduce((sum, cohort) => sum + cohort.populationPct, 0) - 100) <= 1e-6
+    && cohorts.every(cohort => {
+      const baseline = cohort?.baseline;
+      const cohortValues = keys.map(key => cohort?.[key]);
+      const baselineValues = keys.map(key => baseline?.[key]);
+      const cohortYears = cohort?.years;
+      return object(cohort)
+        && typeof cohort.id === 'string' && cohort.id.length > 0
+        && typeof cohort.label === 'string' && cohort.label.length > 0
+        && cohortValues.every(item => finite(item) && item >= 0 && item <= 100)
+        && Math.abs(cohortValues.reduce((sum, item) => sum + item, 0) - 100) <= 1e-6
+        && object(baseline)
+        && baselineValues.every(item => finite(item) && item > 0 && item <= 100)
+        && Math.abs(baselineValues.reduce((sum, item) => sum + item, 0) - 100) <= 1e-6
+        && Array.isArray(cohortYears) && cohortYears.length === years.length
+        && cohortYears.every((snapshot, index) => object(snapshot)
+          && snapshot.year === index + 1
+          && keys.every(key => finite(snapshot[key]) && snapshot[key] >= 0 && snapshot[key] <= 100)
+          && Math.abs(keys.reduce((sum, key) => sum + snapshot[key], 0) - 100) <= 1e-6);
+    });
+  if (!validCohorts)
+    throw new ApiError(200, 'The server returned invalid cohort transportation data.', { code: 'invalid_response' });
   return { ...Object.fromEntries(keys.map(key => [key, value[key]])), years: years.map(snapshot => ({
     year: snapshot.year, gasPct: snapshot.gasPct, evPct: snapshot.evPct, noCarPct: snapshot.noCarPct
+  })), cohorts: cohorts.map(cohort => ({
+    id: cohort.id, label: cohort.label, populationPct: cohort.populationPct,
+    baseline: Object.fromEntries(keys.map(key => [key, cohort.baseline[key]])),
+    ...Object.fromEntries(keys.map(key => [key, cohort[key]])),
+    years: cohort.years.map(snapshot => ({
+      year: snapshot.year, gasPct: snapshot.gasPct, evPct: snapshot.evPct, noCarPct: snapshot.noCarPct
+    }))
   })) };
 }
 
