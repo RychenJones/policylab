@@ -16,7 +16,6 @@ public sealed record Config
     // mutually exclusive: gas vehicle, EV, and no car.
     public Mode BaseShare { get; init; } = new(0.904 * (1.0 - 0.02), 0.904 * 0.02, 1.0 - 0.904);
     // Dynamics.
-    public int SimulatedYears { get; init; } = 5;
     public double ShareAdjustmentRate { get; init; } = 1.0 / 3.0;
 
     // Behavior.
