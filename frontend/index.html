@@ -145,8 +145,8 @@
               </div>
               <div class="field-group">
                 <label for="simulated-years">Simulation horizon</label>
-                <div class="money-input">
-                  <input id="simulated-years" type="number" min="1" max="100" step="1" required />
+                <div class="value-input">
+                  <input id="simulated-years" type="number" min="1" max="100" step="1" value="5" required />
                   <span>years</span>
                 </div>
               </div>
@@ -182,6 +182,11 @@
             </div>
             <p id="result-status" class="result-status">Awaiting simulation</p>
           </div>
+          <div class="chart-tabs" role="tablist" aria-label="Simulation views">
+            <button id="final-tab" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="final-panel">Final outcome</button>
+            <button id="yearly-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="yearly-panel" disabled>Year by year</button>
+          </div>
+          <div id="final-panel" class="tab-panel" role="tabpanel" aria-labelledby="final-tab">
           <article id="empty-state" class="state-card empty-state">
             <div class="state-icon" aria-hidden="true">○</div>
             <div>
@@ -212,16 +217,6 @@
             </div>
           </article>
           <div id="results-content" class="results-content" data-results hidden>
-            <article class="headline-card">
-              <div class="headline-icon" aria-hidden="true">↗</div>
-              <div>
-                <p class="section-kicker">Largest behavioral change</p>
-                <h2 id="headline-title">Gas vehicle use decreased</h2>
-                <p id="headline-detail">
-                  Compared with the starting population.
-                </p>
-              </div>
-            </article>
             <article class="card chart-card">
               <div class="card-heading">
                 <div>
@@ -240,6 +235,16 @@
                 Bars show percentages. Hover over a bar to see the estimated
                 household count.
               </p>
+            </article>
+            <article class="headline-card">
+              <div class="headline-icon" aria-hidden="true">↗</div>
+              <div>
+                <p class="section-kicker">Largest behavioral change</p>
+                <h2 id="headline-title">Gas vehicle use decreased</h2>
+                <p id="headline-detail">
+                  Compared with the starting population.
+                </p>
+              </div>
             </article>
             <article class="card results-table-card">
               <div class="card-heading">
@@ -282,6 +287,14 @@
                   5,000, not counts of individual changes.
                 </p>
               </div>
+            </article>
+          </div>
+          </div>
+          <div id="yearly-panel" class="tab-panel yearly-panel" role="tabpanel" aria-labelledby="yearly-tab" hidden>
+            <article class="card chart-card">
+              <div class="card-heading"><div><p class="section-kicker">Annual progression</p><h3>How the transportation mix changes</h3></div><span class="chart-note">Percent of population</span></div>
+              <div class="chart-wrap"><canvas id="yearly-chart" aria-label="Line chart showing transportation shares by year"></canvas></div>
+              <p class="chart-footnote">Each point shows the model's estimated transportation mix after that year's update.</p>
             </article>
           </div>
         </section>

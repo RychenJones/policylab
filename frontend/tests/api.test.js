@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { ApiError, createApi, INPUT_RULES, sanitizeRequest, sanitizeResult } from '../api.js';
 
 const input = { baseGasShare: 0.88592, baseEvShare: 0.01808, baseNoCarShare: 0.096, gasTax: 1, evRebate: 7500, transitFare: 1.75, simulatedYears: 5 };
-const result = { gasPct: 80, evPct: 10, noCarPct: 10 };
+const result = { gasPct: 80, evPct: 10, noCarPct: 10, years: [
+  { year: 1, gasPct: 82, evPct: 8, noCarPct: 10 },
+  { year: 2, gasPct: 80, evPct: 10, noCarPct: 10 }
+] };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
 test('requestSimulation sends exactly seven validated numeric fields to POST /api/simulate', async () => {
@@ -25,9 +28,12 @@ test('client rejects unknown, missing, string, null, non-finite, zero-share and 
   assert.equal(sanitizeRequest(input).baseNoCarShare, 0.096);
 });
 
-test('response sanitation rejects invalid shares and only returns three numeric fields', () => {
+test('response sanitation preserves valid yearly snapshots and rejects invalid data', () => {
   for (const invalid of [null, [], {}, { ...result, gasPct: '80' }, { ...result, gasPct: NaN },
-    { ...result, evPct: Infinity }, { ...result, noCarPct: -1 }, { ...result, noCarPct: 101 }, { ...result, gasPct: 70 }])
+    { ...result, evPct: Infinity }, { ...result, noCarPct: -1 }, { ...result, noCarPct: 101 }, { ...result, gasPct: 70 },
+    { ...result, years: [] }, { ...result, years: [{ year: 2, gasPct: 82, evPct: 8, noCarPct: 10 }] },
+    { ...result, years: [{ year: 1, gasPct: 81, evPct: 8, noCarPct: 10 }] },
+    { ...result, years: [{ year: 1, gasPct: 82, evPct: '8', noCarPct: 10 }] }])
     assert.throws(() => sanitizeResult(invalid), error => error.code === 'invalid_response');
   assert.deepEqual(sanitizeResult({ ...result, extra: '<script>' }), result);
 });
