@@ -2,6 +2,8 @@ namespace TransportPolicy;
 
 public sealed record YearSnapshot(int Year, double GasPct, double EvPct, double NoCarPct);
 
+public sealed record CohortBaseline(double GasPct, double EvPct, double NoCarPct);
+
 public sealed record CohortResult(
     string Id,
     string Label,
@@ -9,7 +11,11 @@ public sealed record CohortResult(
     double GasPct,
     double EvPct,
     double NoCarPct,
-    IReadOnlyList<YearSnapshot> Years);
+    IReadOnlyList<YearSnapshot> Years)
+{
+    // The adjusted starting mix used for this cohort before policy effects.
+    public CohortBaseline Baseline { get; init; } = new(0, 0, 0);
+}
 
 public sealed record Result(double GasPct, double EvPct, double NoCarPct)
 {
@@ -31,7 +37,12 @@ public sealed record Result(double GasPct, double EvPct, double NoCarPct)
                 left.NoCarPct - right.NoCarPct,
                 left.Years.Zip(right.Years, (l, r) => new YearSnapshot(
                     l.Year, l.GasPct - r.GasPct, l.EvPct - r.EvPct,
-                    l.NoCarPct - r.NoCarPct)).ToArray())).ToArray()
+                    l.NoCarPct - r.NoCarPct)).ToArray())
+                {
+                    // A policy-effect result contains deltas, but the baseline
+                    // remains useful metadata rather than another delta.
+                    Baseline = left.Baseline
+                }).ToArray()
         };
 
     // Formats the result for console display.

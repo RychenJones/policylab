@@ -120,7 +120,13 @@ public static class Simulator
             var final = yearlySnapshots[^1];
             cohortResults.Add(new CohortResult(cohort.Id, cohort.Label,
                 100 * cohort.PopulationShare, final.GasPct, final.EvPct, final.NoCarPct,
-                yearlySnapshots));
+                yearlySnapshots)
+            {
+                Baseline = new CohortBaseline(
+                    100 * cohortConfig.BaseShare.Gas,
+                    100 * cohortConfig.BaseShare.Ev,
+                    100 * cohortConfig.BaseShare.NoCar)
+            });
         }
 
         var collectiveYears = Enumerable.Range(0, simulatedYears)
