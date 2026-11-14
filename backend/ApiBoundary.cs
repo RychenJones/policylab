@@ -10,8 +10,7 @@ public sealed record SimulationRequest(double BaseGasShare, double BaseEvShare, 
 
 public static class ApiBoundary
 {
-    // Fraction precision matches the frontend's 0.001 percentage-point entry.
-    // All three categories must be positive for logarithmic calibration.
+    // Share inputs use fractions with 0.001 percentage-point precision and must remain positive for calibration.
     public static readonly IReadOnlyDictionary<string, InputRule> Inputs = new Dictionary<string, InputRule>
     {
         ["baseGasShare"] = new(0.00001, 0.99998, 0.00001),
@@ -26,6 +25,7 @@ public static class ApiBoundary
     public static PolicyDefaults Defaults => new(Simulator.Cfg.BaseShare.Gas, Simulator.Cfg.BaseShare.Ev,
         Simulator.Cfg.BaseShare.NoCar, 1, 7500, Simulator.Cfg.BaseFare);
 
+    // Validates the JSON scenario and converts it into a typed simulation request.
     public static (SimulationRequest? Request, Dictionary<string, string[]> Errors) Read(JsonElement root)
     {
         var errors = new Dictionary<string, string[]>();
@@ -36,7 +36,7 @@ public static class ApiBoundary
         foreach (var property in root.EnumerateObject())
         {
             if (!Inputs.TryGetValue(property.Name, out var rule))
-                errors["body"] = ["Unknown scenario field. Send only the six documented fields."];
+                errors["body"] = ["Unknown scenario field. Send only the seven documented fields."];
             else if (!seen.Add(property.Name)) errors[property.Name] = ["Duplicate fields are not allowed."];
             else if (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetDouble(out var value) || !double.IsFinite(value))
                 errors[property.Name] = ["Enter a finite JSON number."];
@@ -57,6 +57,7 @@ public static class ApiBoundary
             values["gasTax"], values["evRebate"], values["transitFare"], (int)values["simulatedYears"]), errors);
     }
 
+    // Runs a validated request and rejects malformed results before they cross the API boundary.
     public static Result Calculate(SimulationRequest request, CancellationToken token = default)
     {
         var config = Simulator.Cfg with {
@@ -75,8 +76,6 @@ public static class ApiBoundary
                     .Any(value => !double.IsFinite(value) || value <= 0 || value > 100) ||
                 Math.Abs(cohort.Baseline.GasPct + cohort.Baseline.EvPct + cohort.Baseline.NoCarPct - 100) > 1e-6))
             throw new InvalidOperationException("Simulation returned invalid cohort results.");
-        // Return the final values plus the yearly snapshots. Never clamp,
-        // normalize, fabricate household outcomes, or expose internal model objects.
         return result;
     }
 }

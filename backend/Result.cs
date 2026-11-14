@@ -13,7 +13,7 @@ public sealed record CohortResult(
     double NoCarPct,
     IReadOnlyList<YearSnapshot> Years)
 {
-    // The adjusted starting mix used for this cohort before policy effects.
+    // The cohort's adjusted starting mix before policy effects.
     public CohortBaseline Baseline { get; init; } = new(0, 0, 0);
 }
 
@@ -24,7 +24,7 @@ public sealed record Result(double GasPct, double EvPct, double NoCarPct)
 
     public IReadOnlyList<CohortResult> Cohorts { get; init; } = [];
 
-    // Calculates the percentage-point change between two results.
+    // Subtracts two simulations to produce percentage-point policy effects.
     public static Result operator -(Result a, Result b) =>
         new(a.GasPct - b.GasPct, a.EvPct - b.EvPct, a.NoCarPct - b.NoCarPct)
         {
@@ -39,8 +39,7 @@ public sealed record Result(double GasPct, double EvPct, double NoCarPct)
                     l.Year, l.GasPct - r.GasPct, l.EvPct - r.EvPct,
                     l.NoCarPct - r.NoCarPct)).ToArray())
                 {
-                    // A policy-effect result contains deltas, but the baseline
-                    // remains useful metadata rather than another delta.
+                    // Preserve baseline metadata because it is not itself a policy delta.
                     Baseline = left.Baseline
                 }).ToArray()
         };

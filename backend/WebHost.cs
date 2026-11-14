@@ -4,6 +4,7 @@ namespace TransportPolicy;
 
 public static class WebHost
 {
+    // Configures the API, static frontend, validation responses, and simulation endpoints.
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
