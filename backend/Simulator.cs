@@ -93,8 +93,7 @@ public static class Simulator
     }
 
     // Runs the requested number of years and returns final travel shares.
-    // A request supplies its own immutable configuration and horizon. Never
-    // mutate Cfg or reuse another scenario's fitted baseline parameters.
+    // Each scenario is calibrated independently from its immutable configuration.
     public static Result Simulate(Config cfg, double gasTax, double evRebate, double transitFare,
                                   int simulatedYears,
                                   CancellationToken cancellationToken = default)
@@ -142,6 +141,7 @@ public static class Simulator
     private static YearSnapshot WeightedSnapshot(IReadOnlyList<CohortConfig> configs,
         IReadOnlyList<CohortResult> results, int year)
     {
+        // Combines cohort snapshots using each cohort's population share.
         double gas = 0, ev = 0, noCar = 0;
         for (int i = 0; i < configs.Count; i++)
         {
@@ -153,10 +153,7 @@ public static class Simulator
         return new YearSnapshot(year + 1, gas, ev, noCar);
     }
 
-    // Preserve the public aggregate starting-share input while retaining the
-    // relative income differences in the cohort baselines. Each mode is
-    // scaled by the requested aggregate share, so weighted cohort shares
-    // reproduce it exactly and remain positive for valid aggregate inputs.
+    // Reconciles cohort baselines to the requested aggregate shares while preserving their relative differences.
     private static IReadOnlyList<CohortConfig> ReconcileAggregateBaseline(Config cfg)
     {
         double gas = cfg.Cohorts.Sum(c => c.PopulationShare * c.BaseShare.Gas);

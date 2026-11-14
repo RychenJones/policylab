@@ -2,7 +2,7 @@ namespace TransportPolicy;
 
 public sealed record Config
 {
-    // Prices / physical constants (PLACEHOLDERS).
+    // Prices and physical assumptions used by the cost calculations.
     public double BaseGasPrice { get; init; } = 3.10;
     public double BaseFare { get; init; } = 1.75;
     public double TripsPerYear { get; init; } = 480;
@@ -12,8 +12,7 @@ public sealed record Config
     public double ElectricityPricePerKwh { get; init; } = 0.17;
     public double EvPricePremium { get; init; } = 8_000;
 
-    // Baselines (ACS 2024 commuters, WFH excluded). The three shares are
-    // mutually exclusive: gas vehicle, EV, and no car.
+    // Baseline commuter shares, excluding work-from-home commuters; categories are mutually exclusive.
     public Mode BaseShare { get; init; } = new(0.904 * (1.0 - 0.02), 0.904 * 0.02, 1.0 - 0.904);
     // Dynamics.
     public double ShareAdjustmentRate { get; init; } = 1.0 / 3.0;
@@ -25,10 +24,7 @@ public sealed record Config
     public double EFuel { get; init; } = -0.30 * 0.15;
     public double BetaRebate { get; init; } = 5e-5;
 
-    // National household-income cohorts. Population shares are based on the
-    // 2024 ACS B19001 distribution, aggregated to the four UI bands. The
-    // transport starting shares and behavioral factors are intentionally
-    // explicit so they can be replaced by a newer survey extract later.
+    // National household-income cohorts aggregated from the 2024 ACS B19001 distribution.
     public IReadOnlyList<CohortConfig> Cohorts { get; init; } = DefaultCohorts;
 
     private static IReadOnlyList<CohortConfig> DefaultCohorts =>
@@ -43,6 +39,7 @@ public sealed record Config
             new Mode(0.8701, 0.0469, 0.083), 13_500, 0.90, 0.90, 0.70)
     ];
 
+    // Applies a cohort's starting shares, mileage, and sensitivity multipliers.
     public Config ForCohort(CohortConfig cohort) => this with
     {
         BaseShare = cohort.BaseShare,
