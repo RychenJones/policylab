@@ -2,7 +2,7 @@
 
 Status: proposed interfaces, not an implementation. Complements [API_DRAFT.md](API_DRAFT.md). Policy defaults, ranges, units, and result categories await team agreement.
 
-Language choices are provisional. TypeScript is used here only to describe contracts; it is not a frontend requirement. Implementation must follow the languages and tools the team actually chooses, including plain JavaScript with or without React. React does not require TypeScript. Adapt these declarations to JavaScript functions, JSON examples, and optional JSDoc if appropriate. C# examples likewise assume, but do not mandate, the proposed backend language. The wire contracts and error/cancellation rules apply regardless of implementation language.
+Frontend language decision: use plain JavaScript. React remains optional; it does not change the language choice. TypeScript declarations below are retained only as draft contract notation, not implementation requirements. Implement frontend functions in JavaScript, with optional JSDoc for documentation. C# examples assume, but do not mandate, the proposed backend language. The wire contracts and error/cancellation rules apply regardless of implementation language.
 
 ## Frontend contracts
 

@@ -2,6 +2,8 @@
 
 Status: provisional. Refine when the remaining design documentation arrives.
 
+Frontend language: plain JavaScript. React remains optional. TypeScript in companion drafts is contract notation only.
+
 See [API Functions and Failure Handling Draft](API_FUNCTIONS_DRAFT.md) for matching frontend/backend signatures, proposed DTOs, rejection responses, and cancellation behavior.
 
 ## Shared rules
