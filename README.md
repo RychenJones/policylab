@@ -1,5 +1,7 @@
 # Policy Lab
 
+For a manual server installation from GitHub main, see [one-time deployment](DEPLOYMENT-SETUP.md).
+
 The seven-input plain JavaScript frontend calls C# through requestSimulation(request). There are no local preview calculations or fake result fallbacks.
 
 Run with the .NET 10 SDK:

@@ -10,7 +10,7 @@ Archived: this proposal is not the implemented API, model, frontend language, or
 
 ## 1. Overview
 
-PolicySim lets a legislator set three transportation policy levers (gas tax change — raise or cut, EV rebate, public transit fare) and see how 5,000 synthetic households might respond: keep driving gas, switch to an EV, or move partly or fully to public transit. It shows how many households switch, how their yearly transportation costs change, and how CO2 emissions change. All results are compared with a "current law" baseline. It is an **exploratory, rule-based simulation, not a forecast**, and the UI must say so.
+PolicyLab lets a legislator set three transportation policy levers (gas tax change — raise or cut, EV rebate, public transit fare) and see how 5,000 synthetic households might respond: keep driving gas, switch to an EV, or move partly or fully to public transit. It shows how many households switch, how their yearly transportation costs change, and how CO2 emissions change. All results are compared with a "current law" baseline. It is an **exploratory, rule-based simulation, not a forecast**, and the UI must say so.
 
 ---
 
@@ -114,13 +114,13 @@ flowchart LR
 `backend/Compute.cs` is empty. **Delete it** when BE1 scaffolds the solution. Its role is split into `ChoiceModel.cs` and `SimulationService.cs`.
 
 ```
-policysim/
+policylab/
 ├── global.json                         # pins .NET SDK version (BE1)
 ├── README.md                           # how to run backend + frontend (BE1 + FE1, at polish)
 ├── backend/
-│   ├── PolicySim.sln                   # solution (BE1)
-│   ├── PolicySim.Api/
-│   │   ├── PolicySim.Api.csproj
+│   ├── PolicyLab.sln                   # solution (BE1)
+│   ├── PolicyLab.Api/
+│   │   ├── PolicyLab.Api.csproj
 │   │   ├── Program.cs                  # host, CORS, JSON options, manual body read, endpoint mapping, error handler (BE1)
 │   │   ├── Properties/launchSettings.json # single HTTP-only profile on http://localhost:5080 (BE1)
 │   │   ├── Contracts/                  # wire DTOs — the C# mirror of §6 (BE2 owns, BE1 reviews)
@@ -139,8 +139,8 @@ policysim/
 │   │       ├── ModelConstants.cs       # every constant in §7.4 in one place (BE2)
 │   │       ├── ChoiceModel.cs          # per-household option costs, emissions, choice (BE2)
 │   │       └── SimulationService.cs    # runs baseline vs policy, aggregates → SimulationResponse (BE2)
-│   └── PolicySim.Tests/
-│       ├── PolicySim.Tests.csproj
+│   └── PolicyLab.Tests/
+│       ├── PolicyLab.Tests.csproj
 │       ├── HouseholdGeneratorTests.cs  # determinism, ranges, distribution sanity (BE1)
 │       ├── ValidatorTests.cs           # range/finite/null unit tests on PolicyInputValidator (BE1)
 │       ├── ApiTests.cs                 # WebApplicationFactory: malformed/missing/unknown/string/content-type → 400 (BE1)
@@ -361,7 +361,7 @@ Rounding:
 - **Empty-group guard:** any mean over an empty set (e.g. an income band with 0 households) returns 0, never NaN. A NaN makes the serializer throw, which surfaces as a 500. The same applies to `emissionsChangePercent` when the baseline is 0.
 - Aggregation is a plain sequential loop. No `Parallel`/PLINQ, so the output is order-stable and byte-identical between runs.
 
-**Canonical example.** This JSON is the content of the frontend mock `frontend/src/mocks/simulationResponse.ts`, written as `export const mockResponse = { ... } satisfies SimulationResponse;`. Do not import it as a `.json` file: TypeScript widens `"gas"` to `string`, and then the mock no longer satisfies the type. BE1 also saves the same JSON as `backend/PolicySim.Api/Stub/simulationResponse.sample.json`; it is the Checkpoint 0 stub response and the contract test's reference.
+**Canonical example.** This JSON is the content of the frontend mock `frontend/src/mocks/simulationResponse.ts`, written as `export const mockResponse = { ... } satisfies SimulationResponse;`. Do not import it as a `.json` file: TypeScript widens `"gas"` to `string`, and then the mock no longer satisfies the type. BE1 also saves the same JSON as `backend/PolicyLab.Api/Stub/simulationResponse.sample.json`; it is the Checkpoint 0 stub response and the contract test's reference.
 
 The numbers are the **verified output of the §6.1 generator + §7.2 model for preset B** (+$1.00, $7,500, $2.50; Architect's .NET run, Rev 4). They are internally consistent:
 - Counts sum to 5,000 overall and per band.
@@ -671,7 +671,7 @@ FE1 should add a one-line note at the top of both draft files: "Superseded for M
    - Stub `/api/simulate` returning the §6.3 fixture until BE2's service lands.
    - Co-own calibration (§7.5).
    - Tests: generator, validator, API (WebApplicationFactory), and the contract test.
-3. **Files:** `global.json`, `PolicySim.sln`, `Program.cs`, `launchSettings.json`, `Domain/Household.cs`, `HouseholdGenerator.cs`, `GeneratorSettings.cs`, `Population.cs`, `Validation/PolicyInputValidator.cs`, `Contracts/ConfigResponse.cs`, `Stub/simulationResponse.sample.json`, `Tests/HouseholdGeneratorTests.cs`, `Tests/ValidatorTests.cs`, `Tests/ApiTests.cs`, `Tests/ContractTests.cs`. Delete `backend/Compute.cs`.
+3. **Files:** `global.json`, `PolicyLab.sln`, `Program.cs`, `launchSettings.json`, `Domain/Household.cs`, `HouseholdGenerator.cs`, `GeneratorSettings.cs`, `Population.cs`, `Validation/PolicyInputValidator.cs`, `Contracts/ConfigResponse.cs`, `Stub/simulationResponse.sample.json`, `Tests/HouseholdGeneratorTests.cs`, `Tests/ValidatorTests.cs`, `Tests/ApiTests.cs`, `Tests/ContractTests.cs`. Delete `backend/Compute.cs`.
 4. **Interfaces:**
    - Provides `IReadOnlyList<Household> Population.Households` and `IReadOnlyList<HouseholdOutcome> Population.BaselineOutcomes`. The baseline is computed by calling BE2's `ChoiceModel.Evaluate`. Until it exists, use a stub that returns `Gas`.
    - Consumes `SimulationService.Run(Policy) → SimulationResponse` from BE2. The validator produces the `Policy`.
@@ -960,7 +960,7 @@ Reference values from the verified Rev 4 run (§7.4), for orientation only. Do n
 - Households switched: A 6.0%, B 23.3%, C 19.7%, D 2.3% (toward gas).
 - A's switchers split roughly evenly between EV and transit, so neither "mostly EV" nor "mostly transit" is safe to say in advance.
 
-1. **Frame (30 s).** "Legislators rarely get to test a transportation policy before passing it. PolicySim simulates 5,000 synthetic households so you can explore likely trade-offs. These are exploratory estimates, not predictions." Point to the disclaimer.
+1. **Frame (30 s).** "Legislators rarely get to test a transportation policy before passing it. PolicyLab simulates 5,000 synthetic households so you can explore likely trade-offs. These are exploratory estimates, not predictions." Point to the disclaimer.
 2. **Current law (30 s).** Click the *Current law* preset and Run. "Nothing changes. That's our baseline: [X]% drive a gas car, [Y]% drive an EV, [Z]% use transit." This shows the model is consistent with itself.
 3. **Scenario A: gas tax only, +$1.00/gal (60 s).** Run it. "[n] households ([p]%) change behavior: [observed split between switching to an EV and switching to public transit]. Emissions [fall/rise] [a]%, and average yearly cost [rises/falls] $[c] ([c%]%)." *If the income chart was kept:* "[Observed band] households see the largest cost change, $[cb]."
 4. **Scenario B: the brief's package, +$1.00 tax, $7,500 rebate, $2.50 fare (60 s).** "Adding the rebate brings EV drivers to [m] households (from [Y0]). Emissions [fall] [b]%, [more/less] than with the tax alone. Average cost [rises/falls] $[cB]."
