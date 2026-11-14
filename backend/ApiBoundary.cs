@@ -67,8 +67,8 @@ public static class ApiBoundary
         double[] shares = [result.GasPct, result.EvPct, result.NoCarPct];
         if (shares.Any(value => !double.IsFinite(value) || value < 0 || value > 100) || Math.Abs(shares.Sum() - 100) > 1e-6)
             throw new InvalidOperationException("Simulation returned invalid shares.");
-        // Only the three model outputs cross the boundary; never clamp, normalize,
-        // fabricate household outcomes, or expose internal model objects.
-        return new Result(result.GasPct, result.EvPct, result.NoCarPct);
+        // Return the final values plus the yearly snapshots. Never clamp,
+        // normalize, fabricate household outcomes, or expose internal model objects.
+        return result;
     }
 }

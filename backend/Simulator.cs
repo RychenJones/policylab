@@ -102,18 +102,27 @@ public static class Simulator
         cancellationToken.ThrowIfCancellationRequested();
         var calibrated = Calibrate(cfg);
         var state = new State(cfg.BaseShare);
+        var yearlySnapshots = new List<YearSnapshot>(simulatedYears);
 
         // Apply the same policy inputs once for each simulated year.
         for (int year = 0; year < simulatedYears; year++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             state = Step(cfg, calibrated, state, gasTax, evRebate, transitFare);
+            yearlySnapshots.Add(new YearSnapshot(
+                Year: year + 1,
+                GasPct: 100 * state.Mode.Gas,
+                EvPct: 100 * state.Mode.Ev,
+                NoCarPct: 100 * state.Mode.NoCar));
         }
 
         return new Result(
             GasPct: 100 * state.Mode.Gas,
             EvPct: 100 * state.Mode.Ev,
-            NoCarPct: 100 * state.Mode.NoCar);
+            NoCarPct: 100 * state.Mode.NoCar)
+        {
+            Years = yearlySnapshots
+        };
     }
 
     // Returns the percentage-point change compared with the no-policy baseline.
