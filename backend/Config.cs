@@ -3,14 +3,21 @@ namespace TransportPolicy;
 public sealed record Config
 {
     // Prices and physical assumptions used by the cost calculations.
-    public double BaseGasPrice { get; init; } = 3.10;
-    public double BaseFare { get; init; } = 1.75;
+    // Current U.S. regular-gasoline price snapshot: $3.995/gal for the week of
+    // 2026-11-09 (EIA Gasoline and Diesel Fuel Update).
+    public double BaseGasPrice { get; init; } = 4.00;
+    // 2024 average transit fare per trip, rounded from APTA's $1.53 estimate.
+    public double BaseFare { get; init; } = 1.55;
     public double TripsPerYear { get; init; } = 480;
-    public double MilesPerYear { get; init; } = 12_000;
-    public double Mpg { get; init; } = 26.0;
+    // 2024 average miles per registered vehicle (FHWA Table VM-1).
+    public double MilesPerYear { get; init; } = 11_071;
+    // 2024 EPA real-world average for new vehicles excluding BEVs/PHEVs.
+    public double Mpg { get; init; } = 25.6;
     public double KwhPerMile { get; init; } = 0.30;
-    public double ElectricityPricePerKwh { get; init; } = 0.17;
-    public double EvPricePremium { get; init; } = 8_000;
+    // EIA's 2026 annual-average residential-price forecast: 18.2 cents/kWh.
+    public double ElectricityPricePerKwh { get; init; } = 0.182;
+    // Current all-class average EV premium estimate (CEA, 2025): $11,843, rounded.
+    public double EvPricePremium { get; init; } = 11_800;
 
     // Baseline commuter shares, excluding work-from-home commuters; categories are mutually exclusive.
     public Mode BaseShare { get; init; } = new(0.904 * (1.0 - 0.02), 0.904 * 0.02, 1.0 - 0.904);
