@@ -100,7 +100,6 @@ public static class Simulator
                                   CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ValidateCohorts(cfg.Cohorts);
         var cohorts = ReconcileAggregateBaseline(cfg);
         var cohortResults = new List<CohortResult>(cohorts.Count);
         foreach (var cohort in cohorts)
@@ -146,15 +145,6 @@ public static class Simulator
             noCar += configs[i].PopulationShare * snapshot.NoCarPct;
         }
         return new YearSnapshot(year + 1, gas, ev, noCar);
-    }
-
-    private static void ValidateCohorts(IReadOnlyList<CohortConfig> cohorts)
-    {
-        if (cohorts.Count == 0 || cohorts.Any(c => c.PopulationShare <= 0 ||
-            c.BaseShare.Gas <= 0 || c.BaseShare.Ev <= 0 || c.BaseShare.NoCar <= 0) ||
-            Math.Abs(cohorts.Sum(c => c.PopulationShare) - 1) > 1e-8 ||
-            cohorts.Any(c => Math.Abs(c.BaseShare.Gas + c.BaseShare.Ev + c.BaseShare.NoCar - 1) > 1e-8))
-            throw new InvalidOperationException("Cohort configuration is invalid.");
     }
 
     // Preserve the public aggregate starting-share input while retaining the
