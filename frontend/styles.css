@@ -36,6 +36,10 @@ h2 { margin-bottom: 0; font-size: 24px; letter-spacing: -.04em; } h3 { margin-bo
 .controls-card { position: sticky; top: 20px; padding: 26px 25px 23px; }
 .section-heading, .results-heading, .card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
 .household-badge, .chart-note { margin-top: 5px; padding: 6px 9px; border-radius: 7px; background: #f0f4ef; color: var(--green-dark); font-size: 9px; white-space: nowrap; }
+.chart-actions { display: flex; align-items: center; gap: 9px; }
+.secondary-button { padding: 7px 10px; border: 1px solid #c5d9d0; border-radius: 7px; background: white; color: var(--green-dark); font-size: 10px; font-weight: 700; }
+.secondary-button:hover:not(:disabled) { border-color: var(--green); background: #eaf4ef; }
+.secondary-button:disabled { cursor: not-allowed; opacity: .45; }
 fieldset { margin: 27px 0 0; padding: 0 0 23px; border: 0; border-bottom: 1px solid var(--line); } legend { padding: 0; font-size: 13px; font-weight: 700; }
 .fieldset-help { margin: 4px 0 15px; color: var(--muted); font-size: 10px; }
 .input-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }

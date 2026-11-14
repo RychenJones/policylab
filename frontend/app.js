@@ -11,6 +11,7 @@ const emptyState = document.querySelector('#empty-state');
 const loadingState = document.querySelector('#loading-state');
 const errorState = document.querySelector('#error-state');
 const errorStateDetail = document.querySelector('#error-state-detail');
+const downloadChartButton = document.querySelector('#download-chart');
 const retryButton = document.querySelector('#retry-button');
 const retryConnection = document.querySelector('#retry-connection');
 const numberFormatter = new Intl.NumberFormat('en-US');
@@ -145,6 +146,7 @@ function renderResults(values, result) {
     chart.data.datasets[0].data = baseline; chart.data.datasets[1].data = policy;
     chart.resize(); chart.update();
   }
+  downloadChartButton.disabled = !chart;
   resultStatus.textContent = `Simulation complete · ${simulatedYears}-year estimate`;
 }
 
@@ -202,6 +204,7 @@ document.querySelector('#reset-button').addEventListener('click', () => {
   setResultState('empty');
   resultStatus.textContent = defaults ? 'Ready · Run a scenario to see results' : 'The simulator is not ready yet. Please try again.';
   if (!defaults && !initializing) setResultState('error', "We couldn't load the simulator. Please try again.");
+  downloadChartButton.disabled = true;
   ready();
 });
 for (const input of Object.values(controls)) {
@@ -249,5 +252,13 @@ function retry() {
 }
 retryConnection.addEventListener('click', retry);
 retryButton.addEventListener('click', retry);
+downloadChartButton.addEventListener('click', () => {
+  if (!chart || !lastResult) return;
+  const link = document.createElement('a');
+  link.download = `policy-lab-simulation-${new Date().toISOString().slice(0, 10)}.png`;
+  link.href = chart.toBase64Image('image/png', 1);
+  link.click();
+});
+downloadChartButton.disabled = true;
 setResultState('empty');
 initialize();
